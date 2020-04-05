@@ -29,6 +29,19 @@ wee_alloc = { version = "0.4.2", optional = true }
 [dev-dependencies]
 wasm-bindgen-test = "0.2"
 
+[dependencies.web-sys]
+version = "0.3.4"
+features = [
+  'CanvasRenderingContext2d',
+  'console',
+  'Document',
+  'Element',
+  'HtmlElement',
+  'HtmlCanvasElement',
+  'Node',
+  'Window',
+]
+
 [profile.release]
 # Tell `rustc` to optimize for small code size.
 opt-level = "s"
