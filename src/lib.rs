@@ -20,6 +20,12 @@ extern {
     fn alert(s: &str);
 }
 
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
+
 #[wasm_bindgen]
 pub fn greet() {
     set_panic_hook();
@@ -61,8 +67,6 @@ pub fn greet() {
 
     body.append_child(&canvas).ok();
 
-    let context : String = "1".to_string();
-
     struct Recursive {
         value: Rc<dyn Fn(Rc<Recursive>)>,
         context: RefCell<Box<dyn Any>>
@@ -96,31 +100,44 @@ pub fn greet() {
 
     update_clone(Rc::new(Recursive { 
         value: update_clone.clone(),
-        context: RefCell::new(Box::new(context))
+        context: RefCell::new(Box::new(()))
     }));
 }
 
+struct GameState {
+    x : f32, y : f32, last_time : f64,
+    x_speed : f32, y_speed : f32
+}
 
 pub fn update(context : &mut Box<dyn Any>, rendering_context : &CanvasRenderingContext2d, time : f64) {
-    let context_string = context.downcast_mut::<String>();
+    let game_state = context.downcast_mut::<GameState>();
 
-    if context_string.is_some() {
-        let context_string = context_string.unwrap();
-
-        web_sys::console::log_1(&JsValue::from(context_string.to_string()));
-
-        *context = Box::new(42);
+    if game_state.is_none() {
+        *context = Box::new(GameState { 
+            x: 0.0, y: 0.0, last_time: time,
+            x_speed: 0.9, y_speed: 0.9 });
     }
+
+    let game_state = context.downcast_mut::<GameState>().unwrap();
+    let elapsed = time - game_state.last_time;
+
+    // if game_state.is_some() {
+    //     let context_string = context_string.unwrap();
+
+    //     web_sys::console::log_1(&JsValue::from(context_string.to_string()));
+
+    //     *context = Box::new(42);
+    // }
     
-    let context_i32 = context.downcast_mut::<i32>();
+    // let context_i32 = context.downcast_mut::<i32>();
 
-    if context_i32.is_some() {
-        let context_i32 = context_i32.unwrap();
+    // if context_i32.is_some() {
+    //     let context_i32 = context_i32.unwrap();
 
-        web_sys::console::log_1(&JsValue::from(context_i32.to_string()));
+    //     web_sys::console::log_1(&JsValue::from(context_i32.to_string()));
 
-        *context_i32 += 1;
-    }
+    //     *context_i32 += 1;
+    // }
     
     let canvas = rendering_context.canvas().unwrap();
 
@@ -132,4 +149,23 @@ pub fn update(context : &mut Box<dyn Any>, rendering_context : &CanvasRenderingC
     rendering_context.fill_rect((width - 100.0) * (time * 0.0001).fract(), 10.0, 100.0, 100.0);
 
     rendering_context.fill_rect(0.0, 200.0, width, 100.0);
+
+
+    rendering_context.begin_path();
+    rendering_context.arc(game_state.x as f64, game_state.y as f64, 10.0, 0.0, 2.0 * 3.14).unwrap();
+    rendering_context.set_fill_style(&JsValue::from_str("green"));
+    rendering_context.fill();
+
+    game_state.x += game_state.x_speed * elapsed as f32;
+    game_state.y += game_state.y_speed * elapsed as f32;
+
+    if game_state.x > width as f32 || game_state.x < 0.0 {
+        game_state.x_speed *= -1.0;
+    }
+
+    if game_state.y > height as f32 || game_state.y < 0.0 {
+        game_state.y_speed *= -1.0;
+    }
+
+    game_state.last_time = time;
 }
