@@ -1,6 +1,7 @@
 mod utils;
 
 use std::any::Any;
+use std::mem;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -77,7 +78,7 @@ pub fn greet() {
     
         let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             if let Some(value) = js_value.as_f64() {
-                crate::update(&mut **update.context.borrow_mut(), &rendering_context, value);
+                crate::update(&mut update.context.borrow_mut(), &rendering_context, value);
             }
 
             let update_clone = update.clone();
@@ -100,22 +101,27 @@ pub fn greet() {
 }
 
 
-pub fn update(context : &mut dyn Any, rendering_context : &CanvasRenderingContext2d, time : f64) {
-    let context = context.downcast_mut::<String>();
+pub fn update(context : &mut Box<dyn Any>, rendering_context : &CanvasRenderingContext2d, time : f64) {
+    let context_string = context.downcast_mut::<String>();
 
-    if context.is_some() {
-        let context = context.unwrap();
+    if context_string.is_some() {
+        let context_string = context_string.unwrap();
 
-        /*web_sys::console::log_1(&JsValue::from(context.to_string()));
-        let parsed = (context.to_string().parse::<i32>().unwrap() + 1) % 10;
+        web_sys::console::log_1(&JsValue::from(context_string.to_string()));
 
-        context.clear();
-        context.insert_str(0, &parsed.to_string());*/
+        *context = Box::new(42);
     }
     
+    let context_i32 = context.downcast_mut::<i32>();
 
+    if context_i32.is_some() {
+        let context_i32 = context_i32.unwrap();
 
+        web_sys::console::log_1(&JsValue::from(context_i32.to_string()));
 
+        *context_i32 += 1;
+    }
+    
     let canvas = rendering_context.canvas().unwrap();
 
     let width = canvas.width() as f64;
