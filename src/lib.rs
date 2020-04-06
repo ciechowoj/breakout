@@ -1,9 +1,12 @@
 mod utils;
 
+use std::any::Any;
+use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use std::rc::Rc;
 use web_sys::*;
+use utils::set_panic_hook;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -18,6 +21,8 @@ extern {
 
 #[wasm_bindgen]
 pub fn greet() {
+    set_panic_hook();
+
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
 
@@ -55,12 +60,15 @@ pub fn greet() {
 
     body.append_child(&canvas).ok();
 
+    let context : String = "1".to_string();
+
     struct Recursive {
-        value: Rc<dyn Fn(Recursive)>
+        value: Rc<dyn Fn(Rc<Recursive>)>,
+        context: RefCell<Box<dyn Any>>
     };
 
-    let update = move |update: Recursive| {
-        let context = canvas
+    let update = move |update: Rc<Recursive>| {
+        let rendering_context = canvas
             .get_context("2d")
             .unwrap()
             .unwrap()
@@ -68,13 +76,13 @@ pub fn greet() {
             .unwrap();
     
         let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-            // context.set_fill_style(&JsValue::from_str("red"));
-            
             if let Some(value) = js_value.as_f64() {
-                crate::update(&context, value);
+                crate::update(&mut **update.context.borrow_mut(), &rendering_context, value);
             }
 
-            (update.value)(Recursive { value: update.value.clone() });
+            let update_clone = update.clone();
+
+            (update.value)(update_clone);
         });
 
         let closure = Closure::once_into_js(inner as Box<dyn FnMut(JsValue)>);
@@ -84,20 +92,38 @@ pub fn greet() {
     };
 
     let update_clone = Rc::new(update);
-    update_clone(Recursive { value: update_clone.clone() });
+
+    update_clone(Rc::new(Recursive { 
+        value: update_clone.clone(),
+        context: RefCell::new(Box::new(context))
+    }));
 }
 
 
-pub fn update(context : &CanvasRenderingContext2d, time : f64) {
+pub fn update(context : &mut dyn Any, rendering_context : &CanvasRenderingContext2d, time : f64) {
+    let context = context.downcast_mut::<String>();
 
-    let canvas = context.canvas().unwrap();
+    if context.is_some() {
+        let context = context.unwrap();
+
+        /*web_sys::console::log_1(&JsValue::from(context.to_string()));
+        let parsed = (context.to_string().parse::<i32>().unwrap() + 1) % 10;
+
+        context.clear();
+        context.insert_str(0, &parsed.to_string());*/
+    }
+    
+
+
+
+    let canvas = rendering_context.canvas().unwrap();
 
     let width = canvas.width() as f64;
     let height = canvas.height() as f64;
 
-    context.clear_rect(0.0, 0.0, width, height);
-    context.set_fill_style(&JsValue::from_str("black"));
-    context.fill_rect((width - 100.0) * (time * 0.0001).fract(), 10.0, 100.0, 100.0);
+    rendering_context.clear_rect(0.0, 0.0, width, height);
+    rendering_context.set_fill_style(&JsValue::from_str("black"));
+    rendering_context.fill_rect((width - 100.0) * (time * 0.0001).fract(), 10.0, 100.0, 100.0);
 
-    context.fill_rect(0.0, 200.0, width, 100.0);
+    rendering_context.fill_rect(0.0, 200.0, width, 100.0);
 }
