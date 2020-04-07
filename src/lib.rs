@@ -3,10 +3,13 @@ mod utils;
 use std::any::Any;
 use std::mem;
 use std::cell::RefCell;
+use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use std::rc::Rc;
+use js_sys::*;
 use web_sys::*;
+use utils::KeyCode;
 use utils::set_panic_hook;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -69,7 +72,8 @@ pub fn greet() {
 
     struct Recursive {
         value: Rc<dyn Fn(Rc<Recursive>)>,
-        context: RefCell<Box<dyn Any>>
+        context: RefCell<Box<dyn Any>>,
+        events: Rc<RefCell<Vec<InputEvent>>>
     };
 
     let update = move |update: Rc<Recursive>| {
@@ -82,7 +86,13 @@ pub fn greet() {
     
         let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             if let Some(value) = js_value.as_f64() {
-                crate::update(&mut update.context.borrow_mut(), &rendering_context, value);
+                crate::update(
+                    &mut update.context.borrow_mut(),
+                    &update.events.borrow(),
+                    &rendering_context,
+                    value);
+
+                update.events.borrow_mut().clear();
             }
 
             let update_clone = update.clone();
@@ -97,11 +107,20 @@ pub fn greet() {
     };
 
     let update_clone = Rc::new(update);
-
-    update_clone(Rc::new(Recursive { 
+    let update_struct = Rc::new(Recursive { 
         value: update_clone.clone(),
-        context: RefCell::new(Box::new(()))
-    }));
+        context: RefCell::new(Box::new(())),
+        events: Rc::new(RefCell::new(Vec::new()))
+    });
+
+    bind_event_handlers(&document, update_struct.events.clone());
+
+    update_clone(update_struct);
+}
+
+pub enum InputEvent {
+    KeyDown { time : f64, code : KeyCode },
+    KeyUp { time : f64, code : KeyCode }
 }
 
 struct GameState {
@@ -109,7 +128,31 @@ struct GameState {
     x_speed : f32, y_speed : f32
 }
 
-pub fn update(context : &mut Box<dyn Any>, rendering_context : &CanvasRenderingContext2d, time : f64) {
+pub fn bind_event_handlers(document : &Document, input_events : Rc<RefCell<Vec<InputEvent>>>) {
+    fn js_to_input_event(js_value : JsValue) -> Result<InputEvent, JsValue> {
+        let code = js_sys::Reflect::get(&js_value, &JsValue::from_str("code"))?;
+        let code = code.as_string().unwrap();
+        
+
+        return Ok(InputEvent::KeyDown { time: 0.0, code: KeyCode::from_str(&code.to_string()).unwrap() });
+    }
+
+    let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
+        let event = js_to_input_event(js_value).unwrap();
+
+        input_events.borrow_mut().push(event);
+    });
+    
+    let closure = Closure::wrap(on_keydown as Box<dyn FnMut(JsValue)>);
+    document.set_onkeydown(Some(closure.as_ref().unchecked_ref()));
+    closure.forget();
+}
+
+pub fn update(
+    context : &mut Box<dyn Any>,
+    input_events : &Vec<InputEvent>,
+    rendering_context : &CanvasRenderingContext2d,
+    time : f64) {
     let game_state = context.downcast_mut::<GameState>();
 
     if game_state.is_none() {
@@ -120,24 +163,6 @@ pub fn update(context : &mut Box<dyn Any>, rendering_context : &CanvasRenderingC
 
     let game_state = context.downcast_mut::<GameState>().unwrap();
     let elapsed = time - game_state.last_time;
-
-    // if game_state.is_some() {
-    //     let context_string = context_string.unwrap();
-
-    //     web_sys::console::log_1(&JsValue::from(context_string.to_string()));
-
-    //     *context = Box::new(42);
-    // }
-    
-    // let context_i32 = context.downcast_mut::<i32>();
-
-    // if context_i32.is_some() {
-    //     let context_i32 = context_i32.unwrap();
-
-    //     web_sys::console::log_1(&JsValue::from(context_i32.to_string()));
-
-    //     *context_i32 += 1;
-    // }
     
     let canvas = rendering_context.canvas().unwrap();
 
@@ -150,6 +175,12 @@ pub fn update(context : &mut Box<dyn Any>, rendering_context : &CanvasRenderingC
 
     rendering_context.fill_rect(0.0, 200.0, width, 100.0);
 
+    for event in input_events {
+        match event {
+            InputEvent::KeyDown { time, code } => log!("{} key pressed!", code.as_ref()),
+            _ => ()
+        }
+    }
 
     rendering_context.begin_path();
     rendering_context.arc(game_state.x as f64, game_state.y as f64, 10.0, 0.0, 2.0 * 3.14).unwrap();
@@ -166,6 +197,8 @@ pub fn update(context : &mut Box<dyn Any>, rendering_context : &CanvasRenderingC
     if game_state.y > height as f32 || game_state.y < 0.0 {
         game_state.y_speed *= -1.0;
     }
+
+    // log!("{}, {}", game_state.x, game_state.y);
 
     game_state.last_time = time;
 }
