@@ -1,7 +1,7 @@
 mod utils;
 
 use std::any::Any;
-use std::mem;
+use std::mem::*;
 use std::cell::RefCell;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
@@ -29,11 +29,96 @@ macro_rules! log {
     }
 }
 
+fn now_sec(performance : &Performance) -> f64 {
+    fn sec_to_ms(x : f64) -> f64 { x * 0.001 };
+    return sec_to_ms(performance.now());
+}
+
+#[derive(Debug)]
+pub enum Error {
+    Msg(&'static str),
+    Str(String),
+    Js(JsValue)
+}
+
+impl From<JsValue> for Error {
+    fn from(js_value: JsValue) -> Self {
+        Error::Js(js_value)
+    }
+}
+
+impl From<strum::ParseError> for Error {
+    fn from(error: strum::ParseError) -> Self {
+        Error::Str(error.to_string())
+    }
+}
+
+type Expected<T> = std::result::Result<T, Error>;
+
 #[wasm_bindgen]
 pub fn greet() {
+    fn bind_event_handlers(
+        document : &Document,
+        input_events : Rc<RefCell<Vec<InputEvent>>>,
+        update_struct : Rc<Recursive>) {
+
+        fn get_code(js_value : JsValue) -> Expected<KeyCode> {
+            let code = js_sys::Reflect::get(&js_value, &JsValue::from_str("code"))?;
+            let code = code.as_string().ok_or(Error::Msg("Expected 'code' field in KeyboardEvent!"))?;
+            let code = KeyCode::from_str(&code.to_string())?;
+            return Ok(code);
+        };
+
+        fn js_to_keydown_event(js_value : JsValue, performance : &Performance) -> Expected<InputEvent> {
+            let event = InputEvent::KeyDown { 
+                time: now_sec(performance), 
+                code: get_code(js_value)?
+            };
+
+            return Ok(event);
+        }
+
+        fn js_to_keyup_event(js_value : JsValue, performance : &Performance) -> Expected<InputEvent> {
+            let event = InputEvent::KeyUp { 
+                time: now_sec(performance), 
+                code: get_code(js_value)?
+            };
+
+            return Ok(event);
+        }
+    
+        let update_struct_clone = update_struct.clone();
+        let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
+            let event = js_to_keydown_event(
+                js_value,
+                &update_struct_clone.performance).unwrap();
+
+                input_events.borrow_mut().push(event);
+        });
+        
+        let closure = Closure::wrap(on_keydown as Box<dyn FnMut(JsValue)>);
+        document.set_onkeydown(Some(closure.as_ref().unchecked_ref()));
+        closure.forget();
+
+        let update_struct_clone = update_struct.clone();
+        let on_keyup : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
+            let event = js_to_keyup_event(
+                js_value,
+                &update_struct_clone.performance).unwrap();
+    
+            update_struct_clone.events.borrow_mut().push(event);
+        });
+        
+        let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
+        document.set_onkeyup(Some(closure.as_ref().unchecked_ref()));
+        closure.forget();
+    }
+
     set_panic_hook();
 
     let window = web_sys::window().expect("no global `window` exists");
+    let performance = window.performance().expect("performance should be available");
+
     let document = window.document().expect("should have a document on window");
 
     let html = document.document_element().expect("document should have a html");
@@ -73,7 +158,8 @@ pub fn greet() {
     struct Recursive {
         value: Rc<dyn Fn(Rc<Recursive>)>,
         context: RefCell<Box<dyn Any>>,
-        events: Rc<RefCell<Vec<InputEvent>>>
+        events: Rc<RefCell<Vec<InputEvent>>>,
+        performance: Performance
     };
 
     let update = move |update: Rc<Recursive>| {
@@ -85,12 +171,15 @@ pub fn greet() {
             .unwrap();
     
         let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-            if let Some(value) = js_value.as_f64() {
+            if let Some(_) = js_value.as_f64() {
+
+                let time = now_sec(&update.performance);
+
                 crate::update(
                     &mut update.context.borrow_mut(),
                     &update.events.borrow(),
                     &rendering_context,
-                    value);
+                    time).unwrap();
 
                 update.events.borrow_mut().clear();
             }
@@ -107,13 +196,18 @@ pub fn greet() {
     };
 
     let update_clone = Rc::new(update);
+
     let update_struct = Rc::new(Recursive { 
         value: update_clone.clone(),
         context: RefCell::new(Box::new(())),
-        events: Rc::new(RefCell::new(Vec::new()))
+        events: Rc::new(RefCell::new(Vec::new())),
+        performance: performance
     });
 
-    bind_event_handlers(&document, update_struct.events.clone());
+    bind_event_handlers(
+        &document,
+        update_struct.events.clone(),
+        update_struct.clone());
 
     update_clone(update_struct);
 }
@@ -128,62 +222,54 @@ struct GameState {
     x_speed : f32, y_speed : f32
 }
 
-pub fn bind_event_handlers(document : &Document, input_events : Rc<RefCell<Vec<InputEvent>>>) {
-    fn js_to_input_event(js_value : JsValue) -> Result<InputEvent, JsValue> {
-        let code = js_sys::Reflect::get(&js_value, &JsValue::from_str("code"))?;
-        let code = code.as_string().unwrap();
-        
-
-        return Ok(InputEvent::KeyDown { time: 0.0, code: KeyCode::from_str(&code.to_string()).unwrap() });
-    }
-
-    let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-        let event = js_to_input_event(js_value).unwrap();
-
-        input_events.borrow_mut().push(event);
-    });
-    
-    let closure = Closure::wrap(on_keydown as Box<dyn FnMut(JsValue)>);
-    document.set_onkeydown(Some(closure.as_ref().unchecked_ref()));
-    closure.forget();
-}
-
 pub fn update(
     context : &mut Box<dyn Any>,
     input_events : &Vec<InputEvent>,
     rendering_context : &CanvasRenderingContext2d,
-    time : f64) {
+    time : f64) -> Expected<()> {
     let game_state = context.downcast_mut::<GameState>();
 
     if game_state.is_none() {
         *context = Box::new(GameState { 
             x: 0.0, y: 0.0, last_time: time,
-            x_speed: 0.9, y_speed: 0.9 });
+            x_speed: 9.0, y_speed: 9.0 });
     }
 
-    let game_state = context.downcast_mut::<GameState>().unwrap();
+    let game_state = context.downcast_mut::<GameState>()
+        .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
+
     let elapsed = time - game_state.last_time;
     
-    let canvas = rendering_context.canvas().unwrap();
+    let canvas = rendering_context.canvas()
+        .ok_or(Error::Msg("Failed to get canvas from rendering context."))?;
 
     let width = canvas.width() as f64;
     let height = canvas.height() as f64;
 
     rendering_context.clear_rect(0.0, 0.0, width, height);
     rendering_context.set_fill_style(&JsValue::from_str("black"));
-    rendering_context.fill_rect((width - 100.0) * (time * 0.0001).fract(), 10.0, 100.0, 100.0);
+    rendering_context.fill_rect((width - 100.0) * (time * 0.1).fract(), 10.0, 100.0, 100.0);
 
     rendering_context.fill_rect(0.0, 200.0, width, 100.0);
 
     for event in input_events {
         match event {
-            InputEvent::KeyDown { time, code } => log!("{} key pressed!", code.as_ref()),
+            InputEvent::KeyDown { time, code } => {
+                log!("{} key pressed at time {:.2}!", code.as_ref(), time);
+                log!("x: {}, y: {}", game_state.x, game_state.y);
+                log!("{}", size_of::<JsValue>());
+            },
+            InputEvent::KeyUp { time, code } => {
+                log!("{} key released at time {:.2}!", code.as_ref(), time);
+            },
             _ => ()
         }
     }
 
     rendering_context.begin_path();
-    rendering_context.arc(game_state.x as f64, game_state.y as f64, 10.0, 0.0, 2.0 * 3.14).unwrap();
+
+    rendering_context.arc(game_state.x as f64, game_state.y as f64, 10.0, 0.0, 2.0 * 3.14)?;
+
     rendering_context.set_fill_style(&JsValue::from_str("green"));
     rendering_context.fill();
 
@@ -201,4 +287,6 @@ pub fn update(
     // log!("{}, {}", game_state.x, game_state.y);
 
     game_state.last_time = time;
+
+    return Ok(());
 }
