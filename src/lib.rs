@@ -1,16 +1,17 @@
+#[macro_use]
 mod utils;
+mod game;
+mod vec2;
 
 use std::any::Any;
-use std::mem::*;
 use std::cell::RefCell;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use std::rc::Rc;
-use js_sys::*;
 use web_sys::*;
-use utils::KeyCode;
-use utils::set_panic_hook;
+use utils::*;
+use game::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -23,37 +24,10 @@ extern {
     fn alert(s: &str);
 }
 
-macro_rules! log {
-    ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
-    }
-}
-
 fn now_sec(performance : &Performance) -> f64 {
     fn sec_to_ms(x : f64) -> f64 { x * 0.001 };
     return sec_to_ms(performance.now());
 }
-
-#[derive(Debug)]
-pub enum Error {
-    Msg(&'static str),
-    Str(String),
-    Js(JsValue)
-}
-
-impl From<JsValue> for Error {
-    fn from(js_value: JsValue) -> Self {
-        Error::Js(js_value)
-    }
-}
-
-impl From<strum::ParseError> for Error {
-    fn from(error: strum::ParseError) -> Self {
-        Error::Str(error.to_string())
-    }
-}
-
-type Expected<T> = std::result::Result<T, Error>;
 
 #[wasm_bindgen]
 pub fn greet() {
@@ -141,8 +115,8 @@ pub fn greet() {
         .map_err(|_| ())
         .unwrap();
 
-    canvas.set_width(640);
-    canvas.set_height(480);
+    canvas.set_width(800);
+    canvas.set_height(800);
 
     canvas.style().set_property("border", "none").unwrap();
     canvas.style().set_property("min-width", "800px").unwrap();
@@ -212,16 +186,6 @@ pub fn greet() {
     update_clone(update_struct);
 }
 
-pub enum InputEvent {
-    KeyDown { time : f64, code : KeyCode },
-    KeyUp { time : f64, code : KeyCode }
-}
-
-struct GameState {
-    x : f32, y : f32, last_time : f64,
-    x_speed : f32, y_speed : f32
-}
-
 pub fn update(
     context : &mut Box<dyn Any>,
     input_events : &Vec<InputEvent>,
@@ -238,55 +202,15 @@ pub fn update(
     let game_state = context.downcast_mut::<GameState>()
         .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
 
-    let elapsed = time - game_state.last_time;
-    
-    let canvas = rendering_context.canvas()
+        let canvas = rendering_context.canvas()
         .ok_or(Error::Msg("Failed to get canvas from rendering context."))?;
 
     let width = canvas.width() as f64;
     let height = canvas.height() as f64;
+    let canvas_size = vec2::vec2 { x : width as f32, y : height as f32 };
 
-    rendering_context.clear_rect(0.0, 0.0, width, height);
-    rendering_context.set_fill_style(&JsValue::from_str("black"));
-    rendering_context.fill_rect((width - 100.0) * (time * 0.1).fract(), 10.0, 100.0, 100.0);
-
-    rendering_context.fill_rect(0.0, 200.0, width, 100.0);
-
-    for event in input_events {
-        match event {
-            InputEvent::KeyDown { time, code } => {
-                log!("{} key pressed at time {:.2}!", code.as_ref(), time);
-                log!("x: {}, y: {}", game_state.x, game_state.y);
-                log!("{}", size_of::<JsValue>());
-            },
-            InputEvent::KeyUp { time, code } => {
-                log!("{} key released at time {:.2}!", code.as_ref(), time);
-            },
-            _ => ()
-        }
-    }
-
-    rendering_context.begin_path();
-
-    rendering_context.arc(game_state.x as f64, game_state.y as f64, 10.0, 0.0, 2.0 * 3.14)?;
-
-    rendering_context.set_fill_style(&JsValue::from_str("green"));
-    rendering_context.fill();
-
-    game_state.x += game_state.x_speed * elapsed as f32;
-    game_state.y += game_state.y_speed * elapsed as f32;
-
-    if game_state.x > width as f32 || game_state.x < 0.0 {
-        game_state.x_speed *= -1.0;
-    }
-
-    if game_state.y > height as f32 || game_state.y < 0.0 {
-        game_state.y_speed *= -1.0;
-    }
-
-    // log!("{}, {}", game_state.x, game_state.y);
-
-    game_state.last_time = time;
+    game::update(game_state, input_events, canvas_size, time);
+    game::render(game_state, rendering_context, canvas_size, time);
 
     return Ok(());
 }

@@ -1,3 +1,5 @@
+use wasm_bindgen::prelude::*;
+
 pub fn set_panic_hook() {
     // When the `console_error_panic_hook` feature is enabled, we can call the
     // `set_panic_hook` function at least once during initialization, and then
@@ -7,6 +9,12 @@ pub fn set_panic_hook() {
     // https://github.com/rustwasm/console_error_panic_hook#readme
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
+}
+
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
 }
 
 use strum_macros::AsRefStr;
@@ -175,3 +183,29 @@ pub enum KeyCode {
     Undo,
     WakeUp
 }
+
+pub enum InputEvent {
+    KeyDown { time : f64, code : KeyCode },
+    KeyUp { time : f64, code : KeyCode }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    Msg(&'static str),
+    Str(String),
+    Js(JsValue)
+}
+
+impl From<JsValue> for Error {
+    fn from(js_value: JsValue) -> Self {
+        Error::Js(js_value)
+    }
+}
+
+impl From<strum::ParseError> for Error {
+    fn from(error: strum::ParseError) -> Self {
+        Error::Str(error.to_string())
+    }
+}
+
+pub type Expected<T> = std::result::Result<T, Error>;
