@@ -1,6 +1,7 @@
 use glm::*;
 use crate::utils::*;
 
+#[derive(Copy, Clone)]
 pub struct Collision {
     pub point : Vec2,
     pub normal : Vec2,
@@ -99,7 +100,7 @@ pub fn resolve_circle_aabb_collision(
         let mut circle_origin = circle_new_origin;
         let mut t = a;
 
-        while 0.00001f32 < (a - b).abs() {
+        while 0.000001f32 < (a - b).abs() {
             t = a + (b - a) * 0.5;
             circle_origin = mix(&circle_old_origin, &circle_new_origin, t);
             let new_collision_point = circle_aabb_collision(circle_origin, circle_radius, aabb_origin, aabb_radius);
@@ -116,7 +117,7 @@ pub fn resolve_circle_aabb_collision(
         return Some(Collision {
             point: collision_point,
             normal: normalize(&(circle_origin - collision_point)),
-            t: t
+            t: a
         });
     }
 
