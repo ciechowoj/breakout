@@ -4,7 +4,18 @@ use std::mem::*;
 use wasm_bindgen::prelude::*;
 use web_sys::CanvasRenderingContext2d;
 
+trait Renderable {
+    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()>;
+}
+
+pub enum GameEntity {
+    Bat { position : vec2, size : vec2 },
+    Ball { position : vec2, size : f32 },
+    Brick { position : vec2, size : vec2 }
+}
+
 pub struct GameState {
+    entities : Vec<GameEntity>,
     pub x : f32, pub y : f32, pub last_time : f64,
     pub x_speed : f32, pub y_speed : f32
 }
@@ -26,8 +37,7 @@ pub fn update(
             },
             InputEvent::KeyUp { time, code } => {
                 log!("{} key released at time {:.2}!", code.as_ref(), time);
-            },
-            _ => ()
+            }
         }
     }
 
@@ -44,6 +54,28 @@ pub fn update(
 
     game_state.last_time = time;
 }
+
+impl Renderable for GameEntity {
+    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
+
+        match self {
+            GameEntity::Bat { position, size } => {
+                rendering_context
+                    .set_fill_style(&JsValue::from_str("black"));
+
+                let origin = position - size * 0.5;
+
+                rendering_context
+                    .fill_rect(origin.x as f64, origin.y as f64, size.x as f64, size.y as f64);
+            }
+
+
+        }
+
+        return Ok(());
+    }
+}
+
 
 pub fn render(
     game_state : &GameState,

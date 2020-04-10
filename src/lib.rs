@@ -210,7 +210,7 @@ pub fn update(
     let canvas_size = vec2::vec2 { x : width as f32, y : height as f32 };
 
     game::update(game_state, input_events, canvas_size, time);
-    game::render(game_state, rendering_context, canvas_size, time);
+    game::render(game_state, rendering_context, canvas_size, time)?;
 
     return Ok(());
 }
