@@ -83,16 +83,16 @@ pub fn greet() {
         }
 
         fn js_to_mousemove_event(js_value : JsValue, performance : &Performance) -> Expected<InputEvent> {
-            let offsetX = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetX"))?;
-            let offsetX = offsetX.as_f64().ok_or(Error::Msg("Expected 'offsetX' field in MouseEvent!"))?;
+            let offset_x = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetX"))?;
+            let offset_x = offset_x.as_f64().ok_or(Error::Msg("Expected 'offsetX' field in MouseEvent!"))?;
 
-            let offsetY = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetY"))?;
-            let offsetY = offsetY.as_f64().ok_or(Error::Msg("Expected 'offsetY' field in MouseEvent!"))?;
+            let offset_y = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetY"))?;
+            let offset_y = offset_y.as_f64().ok_or(Error::Msg("Expected 'offsetY' field in MouseEvent!"))?;
 
             let event = InputEvent::MouseMove { 
                 time: now_sec(performance),
-                x: offsetX,
-                y: offsetY
+                x: offset_x,
+                y: offset_y
             };
 
             return Ok(event);

@@ -29,76 +29,93 @@ trait Updateable {
     fn update(&mut self, canvas_size : Vec2, elapsed : f32) -> Expected<()>;
 }
 
-pub enum GameEntity {
-    Bat { position : Vec2, velocity : Vec2, size : Vec2, input : Vec2 },
-    Ball { position : Vec2, velocity : Vec2, size : f32 },
-    Brick { position : Vec2, size : Vec2 }
+pub struct Bat { pub position : Vec2, pub velocity : Vec2, pub size : Vec2, pub input : Vec2 }
+pub struct Ball { pub position : Vec2, pub velocity : Vec2, pub size : f32 }
+pub struct Brick { pub position : Vec2, pub size : Vec2 }
+
+impl Renderable for Bat {
+    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
+        let origin = self.position - self.size * 0.5;
+        rendering_context.set_fill_style(&JsValue::from_str("black"));
+        rendering_context.fill_rect(origin.x as f64, origin.y as f64, self.size.x as f64, self.size.y as f64);
+        return Ok(());
+    }
 }
 
-impl Renderable for GameEntity {
+impl Renderable for Ball {
     fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
+        draw_circle(rendering_context, self.position, self.size, "black")?;
+        return Ok(());
+    }
+}
 
-        match self {
-            GameEntity::Bat { position, velocity, size, input } => {
-                let origin = position - size * 0.5;
-                rendering_context.set_fill_style(&JsValue::from_str("black"));
-                rendering_context.fill_rect(origin.x as f64, origin.y as f64, size.x as f64, size.y as f64);
-            },
-            GameEntity::Ball { position, velocity, size } => {
-                draw_circle(rendering_context, *position, *size, "black")?;
-            },
-            GameEntity::Brick { position, size } => {
-                let origin = position - size * 0.5;
-                rendering_context.set_fill_style(&JsValue::from_str("black"));
-                rendering_context.fill_rect(origin.x as f64, origin.y as f64, size.x as f64, size.y as f64);
-            }
+impl Renderable for Brick {
+    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
+        let origin = self.position - self.size * 0.5;
+        rendering_context.set_fill_style(&JsValue::from_str("black"));
+        rendering_context.fill_rect(origin.x as f64, origin.y as f64, self.size.x as f64, self.size.y as f64);
+        return Ok(());
+    }
+}
+
+impl Updateable for Bat {
+    fn update(
+        &mut self,
+        canvas_size : Vec2,
+        elapsed : f32) -> Expected<()> {
+        self.position += mul(self.input * elapsed, self.velocity);
+        return Ok(());
+    }
+}
+
+impl Updateable for Ball {
+    fn update(
+        &mut self,
+        _canvas_size : Vec2,
+        _elapsed : f32) -> Expected<()> {
+
+
+        /* *position += *velocity * elapsed;
+
+        if position.x > canvas_size.x || position.x < 0.0 {
+            velocity.x *= -1.0;
         }
+
+        if position.y > canvas_size.y as f32 || position.y < 0.0 {
+            velocity.y *= -1.0;
+        } */
 
         return Ok(());
     }
 }
 
-impl Updateable for GameEntity {
+impl Updateable for Brick {
     fn update(
         &mut self,
         canvas_size : Vec2,
         elapsed : f32) -> Expected<()> {
-
-        match self {
-            GameEntity::Bat { position, velocity, size, input } => {
-                *position += mul(*input * elapsed, *velocity);
-            },
-            GameEntity::Ball { position, velocity, size } => {
-                /* *position += *velocity * elapsed;
-
-                if position.x > canvas_size.x || position.x < 0.0 {
-                    velocity.x *= -1.0;
-                }
-
-                if position.y > canvas_size.y as f32 || position.y < 0.0 {
-                    velocity.y *= -1.0;
-                } */
-            },
-            GameEntity::Brick { position, size } => {
-            }
-        }
-
         return Ok(());
     }
 }
 
 pub struct GameState {
-    pub entities : Vec<GameEntity>,
-    pub last_time : f64,
-    pub bat_index : usize
+    pub bat : Bat,
+    pub ball : Ball,
+    pub bricks : Vec<Brick>,
+    pub last_time : f64
 }
 
 impl GameState {
-    pub fn new(entities : Vec<GameEntity>, bat_index : usize, last_time : f64) -> GameState {
+    pub fn new(
+        bat : Bat,
+        ball : Ball,
+        bricks : Vec<Brick>,
+        last_time : f64) -> GameState {
         GameState {
-            entities: entities,
-            last_time: last_time,
-            bat_index: bat_index
+            bat: bat,
+            ball: ball,
+            bricks: bricks,
+            last_time: last_time
         }
     }
 }
@@ -109,20 +126,20 @@ pub fn init(
 
     let bat_position = vec2(canvas_size.x * 0.5, canvas_size.y - 100.0);
 
-    let bat = GameEntity::Bat { 
+    let bat = Bat { 
         position: bat_position,
         velocity: vec2(200.0, 200.0),
         size: vec2(100.0, 20.0),
         input: vec2(0.0, 0.0)
     };
 
-    let ball = GameEntity::Ball {
+    let ball = Ball {
         position: bat_position - vec2(0.0, 50.0),
         velocity: vec2(100.0, 100.0),
         size: 10.0
     };
 
-    let mut entities = vec![bat, ball];
+    let mut bricks : Vec<Brick> = vec![];
 
     let bricks_cols = 10;
     let bricks_rows = 5;
@@ -141,31 +158,30 @@ pub fn init(
         for x in 0..bricks_cols {
             let index = vec2(x as f32, y as f32);
             
-            let brick = GameEntity::Brick {
+            let brick = Brick {
                 position: bricks_origin + mul(brick_size + brick_spacing, index) + brick_origin,
                 size: brick_size
             };
 
-            entities.push(brick);
+            bricks.push(brick);
         }
     }
 
-    GameState ::new(entities, 0, time)
+    GameState::new(bat, ball, bricks, time)
 }
 
 pub fn update_bat_input(
     game_state : &mut GameState,
     expected_input: Option<Vec2>,
     new_input : Vec2) {
-    match &mut game_state.entities[game_state.bat_index] {
-        GameEntity::Bat { position, velocity, size, input } => { 
-            if expected_input.is_none() 
-            || input.x == expected_input.unwrap().x && input.y == expected_input.unwrap().y {
-                *input = new_input;
-            }
-        },
-        _ => { panic!("No bat at bat index!") }
-    };
+    
+    let bat = &mut game_state.bat;
+
+    if expected_input.is_none() 
+    || bat.input.x == expected_input.unwrap().x 
+    && bat.input.y == expected_input.unwrap().y {
+        bat.input = new_input;
+    }
 }
 
 pub fn update(
@@ -197,27 +213,19 @@ pub fn update(
 
                 log!("{} key released at time {:.2}!", code.as_ref(), time);
             },
-            InputEvent::MouseMove { time, x, y } => {
+            InputEvent::MouseMove { time: _, x, y } => {
+                game_state.ball.position.x = *x as f32;
+                game_state.ball.position.y = *y as f32;
 
-                for entity in &mut game_state.entities {
-                    match entity {
-                        GameEntity::Ball { position, velocity, size } =>
-                        { 
-                            position.x = *x as f32;
-                            position.y = *y as f32;
-                        }
-                        _ => {}
-                    }
-
-                    entity.update(canvas_size, elapsed as f32)?;
-                }
-
-                log!("Mouse moved to position {:.2} {:.2} at time {:.2}!", x, y, time);
+                // log!("Mouse moved to position {:.2} {:.2} at time {:.2}!", x, y, time);
             }
         }
     }
 
-    for entity in &mut game_state.entities {
+    game_state.bat.update(canvas_size, elapsed as f32)?;
+    game_state.ball.update(canvas_size, elapsed as f32)?;
+
+    for entity in &mut game_state.bricks {
         entity.update(canvas_size, elapsed as f32)?;
     }
 
@@ -230,14 +238,17 @@ pub fn render(
     game_state : &GameState,
     rendering_context : &CanvasRenderingContext2d,
     canvas_size : Vec2,
-    time : f64) -> Expected<()> {
+    _time : f64) -> Expected<()> {
     let width = canvas_size.x as f64;
     let height = canvas_size.y as f64;
 
     rendering_context.set_fill_style(&JsValue::from_str("lightgray"));
     rendering_context.fill_rect(0.0, 0.0, width, height);
 
-    for entity in &game_state.entities {
+    game_state.bat.render(rendering_context)?;
+    game_state.ball.render(rendering_context)?;
+
+    for entity in &game_state.bricks {
         entity.render(rendering_context)?;
     }
 
