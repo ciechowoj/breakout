@@ -1,7 +1,7 @@
+extern crate nalgebra_glm as glm;
 #[macro_use]
 mod utils;
 mod game;
-mod vec2;
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -12,6 +12,7 @@ use std::rc::Rc;
 use web_sys::*;
 use utils::*;
 use game::*;
+use glm::vec2;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -191,23 +192,22 @@ pub fn update(
     input_events : &Vec<InputEvent>,
     rendering_context : &CanvasRenderingContext2d,
     time : f64) -> Expected<()> {
-    let game_state = context.downcast_mut::<GameState>();
-
-    if game_state.is_none() {
-        *context = Box::new(GameState { 
-            x: 0.0, y: 0.0, last_time: time,
-            x_speed: 9.0, y_speed: 9.0 });
-    }
-
-    let game_state = context.downcast_mut::<GameState>()
-        .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
-
-        let canvas = rendering_context.canvas()
+    
+    let canvas = rendering_context.canvas()
         .ok_or(Error::Msg("Failed to get canvas from rendering context."))?;
 
     let width = canvas.width() as f64;
     let height = canvas.height() as f64;
-    let canvas_size = vec2::vec2 { x : width as f32, y : height as f32 };
+    let canvas_size = vec2(width as f32, height as f32);
+
+    let game_state = context.downcast_mut::<GameState>();
+
+    if game_state.is_none() {
+        *context = Box::new(init(canvas_size, time));
+    }
+
+    let game_state = context.downcast_mut::<GameState>()
+        .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
 
     game::update(game_state, input_events, canvas_size, time);
     game::render(game_state, rendering_context, canvas_size, time)?;
