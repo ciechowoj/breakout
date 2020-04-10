@@ -1,11 +1,24 @@
 use glm::*;
 use crate::utils::*;
+use crate::collision::*;
 use std::mem::*;
 use wasm_bindgen::prelude::*;
 use web_sys::CanvasRenderingContext2d;
 
 pub fn mul(a: Vec2, b: Vec2) -> Vec2 {
     vec2(a.x * b.x, a.y * b.y)
+}
+
+pub fn draw_circle(
+    rendering_context : &CanvasRenderingContext2d,
+    origin : Vec2,
+    radius : f32,
+    color : &'static str) -> Expected<()> {
+    rendering_context.begin_path();
+    rendering_context.arc(origin.x as f64, origin.y as f64, radius as f64, 0.0, two_pi())?;
+    rendering_context.set_fill_style(&JsValue::from_str(color));
+    rendering_context.fill();
+    return Ok(());
 }
 
 trait Renderable {
@@ -32,10 +45,7 @@ impl Renderable for GameEntity {
                 rendering_context.fill_rect(origin.x as f64, origin.y as f64, size.x as f64, size.y as f64);
             },
             GameEntity::Ball { position, velocity, size } => {
-                rendering_context.begin_path();
-                rendering_context.arc(position.x as f64, position.y as f64, *size as f64, 0.0, two_pi())?;
-                rendering_context.set_fill_style(&JsValue::from_str("black"));
-                rendering_context.fill();
+                draw_circle(rendering_context, *position, *size, "black")?;
             },
             GameEntity::Brick { position, size } => {
                 let origin = position - size * 0.5;
@@ -59,7 +69,7 @@ impl Updateable for GameEntity {
                 *position += mul(*input * elapsed, *velocity);
             },
             GameEntity::Ball { position, velocity, size } => {
-                *position += *velocity * elapsed;
+                /* *position += *velocity * elapsed;
 
                 if position.x > canvas_size.x || position.x < 0.0 {
                     velocity.x *= -1.0;
@@ -67,7 +77,7 @@ impl Updateable for GameEntity {
 
                 if position.y > canvas_size.y as f32 || position.y < 0.0 {
                     velocity.y *= -1.0;
-                }
+                } */
             },
             GameEntity::Brick { position, size } => {
             }
@@ -101,7 +111,7 @@ pub fn init(
 
     let bat = GameEntity::Bat { 
         position: bat_position,
-        velocity: vec2(100.0, 100.0),
+        velocity: vec2(200.0, 200.0),
         size: vec2(100.0, 20.0),
         input: vec2(0.0, 0.0)
     };
@@ -186,6 +196,23 @@ pub fn update(
                 }
 
                 log!("{} key released at time {:.2}!", code.as_ref(), time);
+            },
+            InputEvent::MouseMove { time, x, y } => {
+
+                for entity in &mut game_state.entities {
+                    match entity {
+                        GameEntity::Ball { position, velocity, size } =>
+                        { 
+                            position.x = *x as f32;
+                            position.y = *y as f32;
+                        }
+                        _ => {}
+                    }
+
+                    entity.update(canvas_size, elapsed as f32)?;
+                }
+
+                log!("Mouse moved to position {:.2} {:.2} at time {:.2}!", x, y, time);
             }
         }
     }

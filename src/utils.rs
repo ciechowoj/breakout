@@ -1,3 +1,4 @@
+use std::num::*;
 use wasm_bindgen::prelude::*;
 
 pub fn set_panic_hook() {
@@ -186,7 +187,8 @@ pub enum KeyCode {
 
 pub enum InputEvent {
     KeyDown { time : f64, code : KeyCode },
-    KeyUp { time : f64, code : KeyCode }
+    KeyUp { time : f64, code : KeyCode },
+    MouseMove { time : f64, x : f64, y : f64 }
 }
 
 #[derive(Debug)]
@@ -204,6 +206,12 @@ impl From<JsValue> for Error {
 
 impl From<strum::ParseError> for Error {
     fn from(error: strum::ParseError) -> Self {
+        Error::Str(error.to_string())
+    }
+}
+
+impl From<ParseFloatError> for Error {
+    fn from(error: ParseFloatError) -> Self {
         Error::Str(error.to_string())
     }
 }

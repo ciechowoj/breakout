@@ -2,6 +2,7 @@ extern crate nalgebra_glm as glm;
 #[macro_use]
 mod utils;
 mod game;
+mod collision;
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -30,10 +31,29 @@ fn now_sec(performance : &Performance) -> f64 {
     return sec_to_ms(performance.now());
 }
 
+fn reset_canvas_size(canvas : &HtmlCanvasElement) -> Expected<()> {
+    let mut scroll_width = canvas.scroll_width();
+    let mut scroll_height = canvas.scroll_height();
+
+    if scroll_width <= 0 {
+        scroll_width = 640;
+    }
+
+    if scroll_height <= 0 {
+        scroll_height = 480;
+    }
+
+    canvas.set_width(scroll_width as u32);
+    canvas.set_height(scroll_height as u32);
+
+    return Ok(());
+}
+
 #[wasm_bindgen]
 pub fn greet() {
     fn bind_event_handlers(
         document : &Document,
+        canvas : &HtmlCanvasElement,
         input_events : Rc<RefCell<Vec<InputEvent>>>,
         update_struct : Rc<Recursive>) {
 
@@ -54,9 +74,25 @@ pub fn greet() {
         }
 
         fn js_to_keyup_event(js_value : JsValue, performance : &Performance) -> Expected<InputEvent> {
-            let event = InputEvent::KeyUp { 
-                time: now_sec(performance), 
+            let event = InputEvent::KeyUp {
+                time: now_sec(performance),
                 code: get_code(js_value)?
+            };
+
+            return Ok(event);
+        }
+
+        fn js_to_mousemove_event(js_value : JsValue, performance : &Performance) -> Expected<InputEvent> {
+            let offsetX = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetX"))?;
+            let offsetX = offsetX.as_f64().ok_or(Error::Msg("Expected 'offsetX' field in MouseEvent!"))?;
+
+            let offsetY = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetY"))?;
+            let offsetY = offsetY.as_f64().ok_or(Error::Msg("Expected 'offsetY' field in MouseEvent!"))?;
+
+            let event = InputEvent::MouseMove { 
+                time: now_sec(performance),
+                x: offsetX,
+                y: offsetY
             };
 
             return Ok(event);
@@ -87,6 +123,19 @@ pub fn greet() {
         let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
         document.set_onkeyup(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
+
+        let update_struct_clone = update_struct.clone();
+        let on_mousemove : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
+            let event = js_to_mousemove_event(
+                js_value,
+                &update_struct_clone.performance).unwrap();
+    
+            update_struct_clone.events.borrow_mut().push(event);
+        });
+        
+        let closure = Closure::wrap(on_mousemove as Box<dyn FnMut(JsValue)>);
+        canvas.set_onmousemove(Some(closure.as_ref().unchecked_ref()));
+        closure.forget();
     }
 
     set_panic_hook();
@@ -116,11 +165,11 @@ pub fn greet() {
         .map_err(|_| ())
         .unwrap();
 
-    canvas.set_width(800);
-    canvas.set_height(800);
+    reset_canvas_size(&canvas).unwrap();
 
     canvas.style().set_property("border", "none").unwrap();
-    canvas.style().set_property("min-width", "800px").unwrap();
+    canvas.style().set_property("min-width", "1000px").unwrap();
+    canvas.style().set_property("width", "1000px").unwrap();
     canvas.style().set_property("height", "100%").unwrap();
     canvas.style().set_property("margin-left", "auto").unwrap();
     canvas.style().set_property("margin-right", "auto").unwrap();
@@ -137,8 +186,10 @@ pub fn greet() {
         performance: Performance
     };
 
+    let canvas_clone = canvas.clone();
+
     let update = move |update: Rc<Recursive>| {
-        let rendering_context = canvas
+        let rendering_context = canvas_clone
             .get_context("2d")
             .unwrap()
             .unwrap()
@@ -147,7 +198,6 @@ pub fn greet() {
     
         let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             if let Some(_) = js_value.as_f64() {
-
                 let time = now_sec(&update.performance);
 
                 crate::update(
@@ -181,6 +231,7 @@ pub fn greet() {
 
     bind_event_handlers(
         &document,
+        &canvas,
         update_struct.events.clone(),
         update_struct.clone());
 
@@ -196,8 +247,19 @@ pub fn update(
     let canvas = rendering_context.canvas()
         .ok_or(Error::Msg("Failed to get canvas from rendering context."))?;
 
-    let width = canvas.width() as f64;
-    let height = canvas.height() as f64;
+    let mut width = canvas.width();
+    let mut height = canvas.height();
+    let scroll_width = canvas.scroll_width() as u32;
+    let scroll_height = canvas.scroll_height() as u32;
+
+    // log!("{} {} - {} {}", width, height, scroll_width, scroll_height);
+
+    if width != scroll_width || height != scroll_height {
+        reset_canvas_size(&canvas)?;
+        width = canvas.width();
+        height = canvas.height();
+    }
+
     let canvas_size = vec2(width as f32, height as f32);
 
     let game_state = context.downcast_mut::<GameState>();
