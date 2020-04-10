@@ -17,7 +17,7 @@ trait Updateable {
 }
 
 pub enum GameEntity {
-    Bat { position : Vec2, size : Vec2 },
+    Bat { position : Vec2, velocity : Vec2, size : Vec2, input : Vec2 },
     Ball { position : Vec2, velocity : Vec2, size : f32 },
     Brick { position : Vec2, size : Vec2 }
 }
@@ -26,7 +26,7 @@ impl Renderable for GameEntity {
     fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
 
         match self {
-            GameEntity::Bat { position, size } => {
+            GameEntity::Bat { position, velocity, size, input } => {
                 let origin = position - size * 0.5;
                 rendering_context.set_fill_style(&JsValue::from_str("black"));
                 rendering_context.fill_rect(origin.x as f64, origin.y as f64, size.x as f64, size.y as f64);
@@ -55,7 +55,8 @@ impl Updateable for GameEntity {
         elapsed : f32) -> Expected<()> {
 
         match self {
-            GameEntity::Bat { position, size } => {
+            GameEntity::Bat { position, velocity, size, input } => {
+                *position += mul(*input * elapsed, *velocity);
             },
             GameEntity::Ball { position, velocity, size } => {
                 *position += *velocity * elapsed;
@@ -78,7 +79,18 @@ impl Updateable for GameEntity {
 
 pub struct GameState {
     pub entities : Vec<GameEntity>,
-    pub last_time : f64
+    pub last_time : f64,
+    pub bat_index : usize
+}
+
+impl GameState {
+    pub fn new(entities : Vec<GameEntity>, bat_index : usize, last_time : f64) -> GameState {
+        GameState {
+            entities: entities,
+            last_time: last_time,
+            bat_index: bat_index
+        }
+    }
 }
 
 pub fn init(
@@ -89,7 +101,9 @@ pub fn init(
 
     let bat = GameEntity::Bat { 
         position: bat_position,
-        size: vec2(100.0, 20.0)
+        velocity: vec2(100.0, 100.0),
+        size: vec2(100.0, 20.0),
+        input: vec2(0.0, 0.0)
     };
 
     let ball = GameEntity::Ball {
@@ -126,10 +140,22 @@ pub fn init(
         }
     }
 
-    GameState {
-        entities: entities,
-        last_time: time
-    }
+    GameState ::new(entities, 0, time)
+}
+
+pub fn update_bat_input(
+    game_state : &mut GameState,
+    expected_input: Option<Vec2>,
+    new_input : Vec2) {
+    match &mut game_state.entities[game_state.bat_index] {
+        GameEntity::Bat { position, velocity, size, input } => { 
+            if expected_input.is_none() 
+            || input.x == expected_input.unwrap().x && input.y == expected_input.unwrap().y {
+                *input = new_input;
+            }
+        },
+        _ => { panic!("No bat at bat index!") }
+    };
 }
 
 pub fn update(
@@ -139,14 +165,26 @@ pub fn update(
     time : f64) -> Expected<()> {
 
     let elapsed = time - game_state.last_time;
-    
+
     for event in input_events {
         match event {
             InputEvent::KeyDown { time, code } => {
+                match code {
+                    KeyCode::ArrowLeft => { update_bat_input(game_state, None, vec2(-1.0, 0.0)) }
+                    KeyCode::ArrowRight => { update_bat_input(game_state, None, vec2(1.0, 0.0)) }
+                    _ => {}
+                }
+
                 log!("{} key pressed at time {:.2}!", code.as_ref(), time);
                 log!("{}", size_of::<JsValue>());
             },
             InputEvent::KeyUp { time, code } => {
+                match code {
+                    KeyCode::ArrowLeft => { update_bat_input(game_state, Some(vec2(-1.0, 0.0)), vec2(0.0, 0.0)) }
+                    KeyCode::ArrowRight => { update_bat_input(game_state, Some(vec2(1.0, 0.0)), vec2(0.0, 0.0)) }
+                    _ => {}
+                }
+
                 log!("{} key released at time {:.2}!", code.as_ref(), time);
             }
         }
