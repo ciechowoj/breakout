@@ -30,7 +30,29 @@ trait Updateable {
 }
 
 pub struct Bat { pub position : Vec2, pub velocity : Vec2, pub size : Vec2, pub input : Vec2 }
-pub struct Ball { pub position : Vec2, pub velocity : Vec2, pub size : f32 }
+
+pub struct Ball {
+    pub position : Vec2,
+    pub velocity : Vec2,
+    pub size : f32,
+    pub colliding : bool
+}
+
+impl Ball {
+    pub fn new(
+        position : Vec2,
+        velocity : Vec2,
+        size : f32) -> Ball
+    {
+        Ball {
+            position: position,
+            velocity: velocity,
+            size: size,
+            colliding: false
+        }
+    }
+}
+
 pub struct Brick { pub position : Vec2, pub size : Vec2 }
 
 impl Renderable for Bat {
@@ -44,7 +66,7 @@ impl Renderable for Bat {
 
 impl Renderable for Ball {
     fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
-        draw_circle(rendering_context, self.position, self.size, "black")?;
+        draw_circle(rendering_context, self.position, self.size, if self.colliding { "red" } else { "black" })?;
         return Ok(());
     }
 }
@@ -92,8 +114,8 @@ impl Updateable for Ball {
 impl Updateable for Brick {
     fn update(
         &mut self,
-        canvas_size : Vec2,
-        elapsed : f32) -> Expected<()> {
+        _canvas_size : Vec2,
+        _elapsed : f32) -> Expected<()> {
         return Ok(());
     }
 }
@@ -102,7 +124,8 @@ pub struct GameState {
     pub bat : Bat,
     pub ball : Ball,
     pub bricks : Vec<Brick>,
-    pub last_time : f64
+    pub last_time : f64,
+    pub collision : Option<Collision>
 }
 
 impl GameState {
@@ -115,7 +138,8 @@ impl GameState {
             bat: bat,
             ball: ball,
             bricks: bricks,
-            last_time: last_time
+            last_time: last_time,
+            collision: None
         }
     }
 }
@@ -133,18 +157,17 @@ pub fn init(
         input: vec2(0.0, 0.0)
     };
 
-    let ball = Ball {
-        position: bat_position - vec2(0.0, 50.0),
-        velocity: vec2(100.0, 100.0),
-        size: 10.0
-    };
+    let ball = Ball::new(
+        bat_position - vec2(0.0, 50.0),
+        vec2(100.0, 100.0),
+        30.0);
 
     let mut bricks : Vec<Brick> = vec![];
 
-    let bricks_cols = 10;
-    let bricks_rows = 5;
-    let brick_size = vec2(64f32, 32f32);
-    let brick_spacing = vec2(8f32, 8f32);
+    let bricks_cols = 2;
+    let bricks_rows = 2;
+    let brick_size = vec2(64f32, 32f32) * 4.0;
+    let brick_spacing = vec2(100f32, 100f32);
 
     let bricks_size = vec2(
         bricks_cols as f32 * (brick_size.x + brick_spacing.x) - brick_spacing.x,
@@ -225,8 +248,21 @@ pub fn update(
     game_state.bat.update(canvas_size, elapsed as f32)?;
     game_state.ball.update(canvas_size, elapsed as f32)?;
 
-    for entity in &mut game_state.bricks {
-        entity.update(canvas_size, elapsed as f32)?;
+    game_state.ball.colliding = false;
+    game_state.collision = None;
+
+    for brick in &mut game_state.bricks {
+        brick.update(canvas_size, elapsed as f32)?;
+
+        if let Some(collision) = resolve_circle_aabb_collision(
+            game_state.bat.position,
+            game_state.ball.position, 
+            game_state.ball.size,
+            brick.position,
+            brick.size * 0.5) {
+            game_state.ball.colliding = true;
+            game_state.collision = Some(collision);
+        }
     }
 
     game_state.last_time = time;
@@ -245,11 +281,15 @@ pub fn render(
     rendering_context.set_fill_style(&JsValue::from_str("lightgray"));
     rendering_context.fill_rect(0.0, 0.0, width, height);
 
-    game_state.bat.render(rendering_context)?;
     game_state.ball.render(rendering_context)?;
+    game_state.bat.render(rendering_context)?;
 
     for entity in &game_state.bricks {
         entity.render(rendering_context)?;
+    }
+    
+    if let Some(collision) = &game_state.collision {
+        draw_circle(rendering_context, collision.point, 3.0, "green")?;
     }
 
     return Ok(());
