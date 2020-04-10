@@ -9,6 +9,10 @@ pub fn mul(a: Vec2, b: Vec2) -> Vec2 {
     vec2(a.x * b.x, a.y * b.y)
 }
 
+pub fn reflect(v: Vec2, n: Vec2) -> Vec2 {
+    v - 2f32 * dot(&v, &n) * n
+}
+
 pub fn draw_circle(
     rendering_context : &CanvasRenderingContext2d,
     origin : Vec2,
@@ -18,6 +22,20 @@ pub fn draw_circle(
     rendering_context.arc(origin.x as f64, origin.y as f64, radius as f64, 0.0, two_pi())?;
     rendering_context.set_fill_style(&JsValue::from_str(color));
     rendering_context.fill();
+    return Ok(());
+}
+
+pub fn draw_vector(
+    rendering_context : &CanvasRenderingContext2d,
+    origin : Vec2,
+    target : Vec2,
+    color : &'static str) -> Expected<()> {
+    rendering_context.begin_path();
+    rendering_context.set_line_width(2f64);
+    rendering_context.move_to(origin.x as f64, origin.y as f64);
+    rendering_context.line_to(target.x as f64, target.y as f64);
+    rendering_context.set_stroke_style(&JsValue::from_str(color));
+    rendering_context.stroke();
     return Ok(());
 }
 
@@ -289,7 +307,18 @@ pub fn render(
     }
     
     if let Some(collision) = &game_state.collision {
+        draw_vector(rendering_context, collision.point, collision.point + collision.normal * 32f32, "green")?;
         draw_circle(rendering_context, collision.point, 3.0, "green")?;
+
+        let from_dir = collision.point - game_state.bat.position;
+        draw_vector(rendering_context, collision.point, game_state.bat.position, "blue")?;
+
+        let reflected = reflect(from_dir, collision.normal) * (1.0 - collision.t);
+
+        
+
+        draw_vector(rendering_context, collision.point, collision.point + reflected, "yellow")?;
+
     }
 
     return Ok(());
