@@ -209,7 +209,7 @@ pub fn update(
     let game_state = context.downcast_mut::<GameState>()
         .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
 
-    game::update(game_state, input_events, canvas_size, time);
+    game::update(game_state, input_events, canvas_size, time)?;
     game::render(game_state, rendering_context, canvas_size, time)?;
 
     return Ok(());
