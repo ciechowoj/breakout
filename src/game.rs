@@ -5,12 +5,16 @@ use std::mem::*;
 use wasm_bindgen::prelude::*;
 use web_sys::CanvasRenderingContext2d;
 
+pub fn fmin(a: f32, b: f32) -> f32 { if a < b { a } else { b } }
+pub fn fmax(a: f32, b: f32) -> f32 { if a < b { b } else { a } }
+
 pub fn mul(a: Vec2, b: Vec2) -> Vec2 {
     vec2(a.x * b.x, a.y * b.y)
 }
 
 pub fn reflect(v: Vec2, n: Vec2) -> Vec2 {
-    v - 2f32 * dot(&v, &n) * n
+    let v_dot_n = dot(&v, &n);
+    if v_dot_n < 0.0 { v - 2f32 * v_dot_n * n } else { v }
 }
 
 pub fn draw_circle(
@@ -104,11 +108,15 @@ impl Renderable for Brick {
 impl Updateable<Bat> for GameState {
     fn update(
         &mut self,
-        _canvas_size : Vec2,
+        canvas_size : Vec2,
         elapsed : f32) -> Expected<()> {
 
         let bat = &mut self.bat;
         bat.position += mul(bat.input * elapsed, bat.velocity);
+
+        bat.position.x -= fmin(bat.position.x - bat.size.x * 0.5, 0f32);
+        bat.position.x -= fmax(bat.position.x + bat.size.x * 0.5 - canvas_size.x, 0f32);
+
         return Ok(());
     }
 }
@@ -230,9 +238,9 @@ pub fn init(
     };
 
     let ball = Ball::new(
-        bat_position - vec2(50.0, 0.0),
+        bat_position - vec2(0.0, 50.0),
         // vec2(0.0, 0.0), 
-        vec2(100.0, 0.0),
+        vec2(1000.0, 1000.0),
         30.0);
 
     let mut bricks : Vec<Brick> = vec![];
