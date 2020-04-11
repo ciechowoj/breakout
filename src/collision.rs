@@ -1,4 +1,5 @@
 use glm::*;
+#[allow(unused_imports)]
 use crate::utils::*;
 
 #[derive(Copy, Clone)]
@@ -21,11 +22,10 @@ fn search_exact_collision_point<F>(
     let mut b = 1f32;
 
     let mut collision_point = collision_point;
-    let mut circle_origin = new_origin;
 
     while COLLISION_EPSILON < (a - b).abs() {
         let t = a + (b - a) * 0.5;
-        circle_origin = mix(&old_origin, &new_origin, t);
+        let circle_origin = mix(&old_origin, &new_origin, t);
         let new_collision_point = test_collision(circle_origin);
 
         if let Some(point) = new_collision_point {

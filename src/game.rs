@@ -31,6 +31,7 @@ pub fn draw_circle(
     return Ok(());
 }
 
+#[allow(dead_code)]
 pub fn draw_vector(
     rendering_context : &CanvasRenderingContext2d,
     origin : Vec2,
@@ -310,9 +311,9 @@ pub fn update_bat_input(
 }
 
 pub fn init_overlay(
-    game_state : &mut GameState,
+    _game_state : &mut GameState,
     overlay : &HtmlElement,
-    time : f64) -> Expected<()> {
+    _time : f64) -> Expected<()> {
 
     let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
 
@@ -338,7 +339,7 @@ pub fn init_overlay(
 pub fn update_overlay(
     game_state : &mut GameState,
     overlay : &HtmlElement,
-    time : f64) -> Expected<()> {
+    _time : f64) -> Expected<()> {
 
     let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
 

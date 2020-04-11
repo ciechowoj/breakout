@@ -55,7 +55,7 @@ pub fn greet() {
         body.style().set_property("margin", "0px")?;
         body.style().set_property("padding", "0px")?;
         body.style().set_property("width", "100%")?;
-        body.style().set_property("height", "100%")?;
+        body.style().set_property("height", "1210px")?;
         return Ok(());
     }
 
@@ -75,8 +75,9 @@ pub fn greet() {
     fn set_outer_div_style(canvas : &HtmlElement) -> Expected<()> {
         canvas.style().set_property("border", "none")?;
         canvas.style().set_property("min-width", "1000px")?;
+        canvas.style().set_property("min-height", "1210px")?;
         canvas.style().set_property("width", "1000px")?;
-        canvas.style().set_property("height", "100%")?;
+        canvas.style().set_property("height", "1210px")?;
         canvas.style().set_property("margin-left", "auto")?;
         canvas.style().set_property("margin-right", "auto")?;
         canvas.style().set_property("padding-left", "0px")?;
