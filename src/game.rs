@@ -1,10 +1,11 @@
 use glm::*;
 use crate::utils::*;
 use crate::collision::*;
+use crate::dom_utils::*;
 use std::mem::*;
+use std::include_str;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::CanvasRenderingContext2d;
 use web_sys::*;
 
 pub fn fmin(a: f32, b: f32) -> f32 { if a < b { a } else { b } }
@@ -316,6 +317,9 @@ pub fn init_overlay(
     _time : f64) -> Expected<()> {
 
     let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
+
+    create_style_element(&document, include_str!("game.css"), "game-css")?;
+
 
     let score = document.create_element("span")?;
     let score = score.dyn_into::<web_sys::HtmlElement>()

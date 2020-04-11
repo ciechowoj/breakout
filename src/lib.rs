@@ -1,6 +1,7 @@
 extern crate nalgebra_glm as glm;
 #[macro_use]
 mod utils;
+mod dom_utils;
 mod game;
 mod collision;
 
@@ -10,9 +11,11 @@ use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use std::rc::Rc;
+use std::include_str;
 use web_sys::*;
 use utils::*;
 use game::*;
+use crate::dom_utils::*;
 use glm::vec2;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -51,42 +54,6 @@ fn reset_canvas_size(canvas : &HtmlCanvasElement) -> Expected<()> {
 
 #[wasm_bindgen]
 pub fn greet() {
-    fn set_body_style(body : &HtmlElement) -> Expected<()> {
-        body.style().set_property("margin", "0px")?;
-        body.style().set_property("padding", "0px")?;
-        body.style().set_property("width", "100%")?;
-        body.style().set_property("height", "1210px")?;
-        return Ok(());
-    }
-
-    fn set_canvas_style(canvas : &HtmlElement) -> Expected<()> {
-        canvas.style().set_property("border", "none")?;
-        canvas.style().set_property("width", "100%")?;
-        canvas.style().set_property("height", "100%")?;
-        canvas.style().set_property("margin-left", "0px")?;
-        canvas.style().set_property("margin-right", "0px")?;
-        canvas.style().set_property("padding-left", "0px")?;
-        canvas.style().set_property("padding-right", "0px")?;
-        canvas.style().set_property("display", "block")?;
-        canvas.style().set_property("position", "absolute")?;
-        return Ok(());
-    }
-
-    fn set_outer_div_style(canvas : &HtmlElement) -> Expected<()> {
-        canvas.style().set_property("border", "none")?;
-        canvas.style().set_property("min-width", "1000px")?;
-        canvas.style().set_property("min-height", "1210px")?;
-        canvas.style().set_property("width", "1000px")?;
-        canvas.style().set_property("height", "1210px")?;
-        canvas.style().set_property("margin-left", "auto")?;
-        canvas.style().set_property("margin-right", "auto")?;
-        canvas.style().set_property("padding-left", "0px")?;
-        canvas.style().set_property("padding-right", "0px")?;
-        canvas.style().set_property("display", "block")?;
-        canvas.style().set_property("position", "relative")?;
-        return Ok(());
-    }
-
     struct Recursive {
         value: Rc<dyn Fn(Rc<Recursive>)>,
         context: RefCell<Box<dyn Any>>,
@@ -264,21 +231,17 @@ pub fn greet() {
     let document = window.document().expect("should have a document on window");
     document.set_title("Omg! It works!");
 
-    let html = document.document_element().expect("document should have a html");
-    let html = html.dyn_into::<web_sys::HtmlElement>()
-        .map_err(|_| ())
-        .unwrap();
-
-    html.style().set_property("height", "100%").unwrap();
+    create_style_element(&document, include_str!("main.css"), "main-css")
+        .expect("Failed to create main.css.");
 
     let body = document.body().expect("document should have a body");
-    set_body_style(&body).unwrap();
     
     let outer_div = document.create_element("div").unwrap();
     let outer_div = outer_div.dyn_into::<web_sys::HtmlElement>()
         .map_err(|_| ())
         .unwrap();
-    set_outer_div_style(&outer_div).unwrap();
+
+    outer_div.set_id("outer-div");
     body.append_child(&outer_div).ok();
 
     let canvas = document.create_element("canvas").unwrap();
@@ -286,8 +249,8 @@ pub fn greet() {
         .map_err(|_| ())
         .unwrap();
 
+    canvas.set_class_name("main-canvas-area");
     reset_canvas_size(&canvas).unwrap();
-    set_canvas_style(&canvas).unwrap();
     
     outer_div.append_child(&canvas).ok();
     
@@ -295,7 +258,7 @@ pub fn greet() {
     let overlay = overlay.dyn_into::<web_sys::HtmlElement>()
         .map_err(|_| ())
         .unwrap();
-    set_canvas_style(&overlay).unwrap();
+    overlay.set_class_name("main-canvas-area");
     outer_div.append_child(&overlay).ok();
         
     setup_main_loop(&document, &canvas, overlay, window).unwrap();
@@ -358,8 +321,6 @@ pub fn update_fps(
             .unwrap();
 
         fps_counter.set_id("fps-counter");
-        fps_counter.style().set_property("font-family", "\"Lucida Console\", Courier, monospace")?;
-        fps_counter.style().set_property("font-size", "16px")?;
         overlay.append_child(&fps_counter).ok();       
     }
 
