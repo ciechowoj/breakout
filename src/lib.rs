@@ -51,6 +51,34 @@ fn reset_canvas_size(canvas : &HtmlCanvasElement) -> Expected<()> {
 
 #[wasm_bindgen]
 pub fn greet() {
+    fn set_body_style(body : &HtmlElement) -> Expected<()> {
+        body.style().set_property("margin", "0px")?;
+        body.style().set_property("padding", "0px")?;
+        body.style().set_property("width", "100%")?;
+        body.style().set_property("height", "100%")?;
+        return Ok(());
+    }
+
+    fn set_canvas_style(canvas : &HtmlCanvasElement) -> Expected<()> {
+        canvas.style().set_property("border", "none")?;
+        canvas.style().set_property("min-width", "1000px")?;
+        canvas.style().set_property("width", "1000px")?;
+        canvas.style().set_property("height", "100%")?;
+        canvas.style().set_property("margin-left", "auto")?;
+        canvas.style().set_property("margin-right", "auto")?;
+        canvas.style().set_property("padding-left", "0px")?;
+        canvas.style().set_property("padding-right", "0px")?;
+        canvas.style().set_property("display", "block")?;
+        return Ok(());
+    }
+
+    struct Recursive {
+        value: Rc<dyn Fn(Rc<Recursive>)>,
+        context: RefCell<Box<dyn Any>>,
+        events: Rc<RefCell<Vec<InputEvent>>>,
+        performance: Performance
+    };
+
     fn bind_event_handlers(
         document : &Document,
         canvas : &HtmlCanvasElement,
@@ -138,12 +166,73 @@ pub fn greet() {
         closure.forget();
     }
 
+    fn setup_main_loop(
+        document : &Document,
+        canvas : &HtmlCanvasElement,
+        window : Window) -> Expected<()> {
+    
+        let performance = window.performance().expect("performance should be available");
+
+        let canvas_clone = canvas.clone();
+    
+        let update = move |update: Rc<Recursive>| {
+            let rendering_context = canvas_clone
+                .get_context("2d")
+                .unwrap()
+                .unwrap()
+                .dyn_into::<web_sys::CanvasRenderingContext2d>()
+                .unwrap();
+        
+            let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
+                if let Some(_) = js_value.as_f64() {
+                    let time = now_sec(&update.performance);
+    
+                    crate::update(
+                        &mut update.context.borrow_mut(),
+                        &update.events.borrow(),
+                        &rendering_context,
+                        time).unwrap();
+    
+                    update.events.borrow_mut().clear();
+                }
+    
+                let update_clone = update.clone();
+    
+                (update.value)(update_clone);
+            });
+    
+            let closure = Closure::once_into_js(inner as Box<dyn FnMut(JsValue)>);
+        
+            window.request_animation_frame(closure.as_ref().unchecked_ref())
+                .unwrap();
+        };
+    
+        let update_clone = Rc::new(update);
+    
+        let update_struct = Rc::new(Recursive { 
+            value: update_clone.clone(),
+            context: RefCell::new(Box::new(())),
+            events: Rc::new(RefCell::new(Vec::new())),
+            performance: performance
+        });
+    
+        bind_event_handlers(
+            &document,
+            &canvas,
+            update_struct.events.clone(),
+            update_struct.clone());
+    
+        update_clone(update_struct);
+
+        return Ok(());
+    }
+
     set_panic_hook();
 
     let window = web_sys::window().expect("no global `window` exists");
-    let performance = window.performance().expect("performance should be available");
-
+    
     let document = window.document().expect("should have a document on window");
+    document.set_title("Omg! It works!");
 
     let html = document.document_element().expect("document should have a html");
     let html = html.dyn_into::<web_sys::HtmlElement>()
@@ -153,89 +242,19 @@ pub fn greet() {
     html.style().set_property("height", "100%").unwrap();
 
     let body = document.body().expect("document should have a body");
-    document.set_title("Omg! It works!");
-
-    body.style().set_property("margin", "0px").unwrap();
-    body.style().set_property("padding", "0px").unwrap();
-    body.style().set_property("width", "100%").unwrap();
-    body.style().set_property("height", "100%").unwrap();
-
+    set_body_style(&body).unwrap();
+    
     let canvas = document.create_element("canvas").unwrap();
     let canvas = canvas.dyn_into::<web_sys::HtmlCanvasElement>()
         .map_err(|_| ())
         .unwrap();
 
     reset_canvas_size(&canvas).unwrap();
-
-    canvas.style().set_property("border", "none").unwrap();
-    canvas.style().set_property("min-width", "1000px").unwrap();
-    canvas.style().set_property("width", "1000px").unwrap();
-    canvas.style().set_property("height", "100%").unwrap();
-    canvas.style().set_property("margin-left", "auto").unwrap();
-    canvas.style().set_property("margin-right", "auto").unwrap();
-    canvas.style().set_property("padding-left", "0px").unwrap();
-    canvas.style().set_property("padding-right", "0px").unwrap();
-    canvas.style().set_property("display", "block").unwrap();
+    set_canvas_style(&canvas).unwrap();
 
     body.append_child(&canvas).ok();
 
-    struct Recursive {
-        value: Rc<dyn Fn(Rc<Recursive>)>,
-        context: RefCell<Box<dyn Any>>,
-        events: Rc<RefCell<Vec<InputEvent>>>,
-        performance: Performance
-    };
-
-    let canvas_clone = canvas.clone();
-
-    let update = move |update: Rc<Recursive>| {
-        let rendering_context = canvas_clone
-            .get_context("2d")
-            .unwrap()
-            .unwrap()
-            .dyn_into::<web_sys::CanvasRenderingContext2d>()
-            .unwrap();
-    
-        let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-            if let Some(_) = js_value.as_f64() {
-                let time = now_sec(&update.performance);
-
-                crate::update(
-                    &mut update.context.borrow_mut(),
-                    &update.events.borrow(),
-                    &rendering_context,
-                    time).unwrap();
-
-                update.events.borrow_mut().clear();
-            }
-
-            let update_clone = update.clone();
-
-            (update.value)(update_clone);
-        });
-
-        let closure = Closure::once_into_js(inner as Box<dyn FnMut(JsValue)>);
-    
-        window.request_animation_frame(closure.as_ref().unchecked_ref())
-            .unwrap();
-    };
-
-    let update_clone = Rc::new(update);
-
-    let update_struct = Rc::new(Recursive { 
-        value: update_clone.clone(),
-        context: RefCell::new(Box::new(())),
-        events: Rc::new(RefCell::new(Vec::new())),
-        performance: performance
-    });
-
-    bind_event_handlers(
-        &document,
-        &canvas,
-        update_struct.events.clone(),
-        update_struct.clone());
-
-    update_clone(update_struct);
+    setup_main_loop(&document, &canvas, window).unwrap();
 }
 
 pub fn update(
