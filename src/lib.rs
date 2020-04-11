@@ -92,7 +92,7 @@ pub fn greet() {
         events: Rc<RefCell<Vec<InputEvent>>>,
         performance: Performance,
         overlay: HtmlElement,
-        last_time: f64
+        last_time: RefCell<f64>
     };
 
     fn bind_event_handlers(
@@ -203,15 +203,24 @@ pub fn greet() {
             let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
                 if let Some(_) = js_value.as_f64() {
                     let time = now_sec(&update.performance);
-    
+
                     crate::update(
                         &mut update.context.borrow_mut(),
                         &update.events.borrow(),
                         &rendering_context,
                         &update.overlay,
                         time).unwrap();
-    
+
                     update.events.borrow_mut().clear();
+
+                    let elapsed = now_sec(&update.performance) - time;
+                    
+                    crate::update_fps(
+                        &mut update.last_time.borrow_mut(),
+                        &update.overlay,
+                        elapsed,
+                        time).unwrap();
+
                 }
     
                 let update_clone = update.clone();
@@ -232,7 +241,8 @@ pub fn greet() {
             context: RefCell::new(Box::new(())),
             events: Rc::new(RefCell::new(Vec::new())),
             performance: performance,
-            overlay: overlay
+            overlay: overlay,
+            last_time: RefCell::new(0f64)
         });
     
         bind_event_handlers(
@@ -318,7 +328,7 @@ pub fn update(
     if game_state.is_none() {
         *context = Box::new(init(canvas_size, time));
         let game_state = context.downcast_mut::<GameState>()
-            .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;;
+            .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
         game::init_overlay(game_state, overlay, time)?;
     }
 
@@ -328,6 +338,45 @@ pub fn update(
     game::update(game_state, input_events, canvas_size, time)?;
     game::update_overlay(game_state, overlay, time)?;
     game::render(game_state, rendering_context, canvas_size, time)?;
+
+    return Ok(());
+}
+
+pub fn update_fps(
+    last_time : &mut f64,
+    overlay : &HtmlElement,
+    elapsed : f64,
+    time : f64) -> Expected<()> {
+
+    let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
+
+    if let None = document.get_element_by_id("fps-counter") {
+        let fps_counter = document.create_element("span").unwrap();
+        let fps_counter = fps_counter.dyn_into::<web_sys::HtmlElement>()
+            .map_err(|_| ())
+            .unwrap();
+
+        fps_counter.set_id("fps-counter");
+        fps_counter.style().set_property("font-family", "\"Lucida Console\", Courier, monospace")?;
+        fps_counter.style().set_property("font-size", "16px")?;
+        overlay.append_child(&fps_counter).ok();       
+    }
+
+    if let Some(fps_counter) = document.get_element_by_id("fps-counter") {
+        let frame_time = time - *last_time;
+
+        let frame_time = format!(
+            "FPS: {:.4}</br>Frame time: {:.4}</br>Game time: {:.4} [{:.0}%]",
+            1f64 / frame_time,
+            frame_time,
+            elapsed,
+            elapsed / frame_time * 100f64);
+
+        fps_counter.set_inner_html(&frame_time[..]);
+
+    }
+
+    *last_time = time;
 
     return Ok(());
 }
