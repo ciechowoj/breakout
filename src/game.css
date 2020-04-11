@@ -1,5 +1,21 @@
 
-#some-rule {
-
+#footer-score {
+    position: absolute;
+    bottom: 0px;
+    margin-left: 25%;
+    width: 50%;
+    margin-right: 25%;
+    text-align: center;
+    font-size: 48px;
+    font-family: Helvetica, Arial, sans-serif;
 }
 
+#footer-lives {
+    position: absolute;
+    bottom: 0px;
+    margin-left: 75%;
+    width: 25%;
+    text-align: right;
+    font-size: 48px;
+    font-family: Helvetica, Arial, sans-serif;
+}

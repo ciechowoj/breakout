@@ -3,6 +3,7 @@ use crate::utils::*;
 use crate::collision::*;
 use crate::dom_utils::*;
 use std::mem::*;
+use std::cmp::{max, min};
 use std::include_str;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -188,7 +189,9 @@ impl Updateable<Ball> for GameState {
             ball.size,
             canvas_size * 0.5,
             canvas_size * 0.5) {
-            outer_collision = Some(collision);
+            if collision.normal != vec2(0f32, -1f32) {
+                outer_collision = Some(collision);
+            }
         }
 
         if let Some(collision) = outer_collision {
@@ -199,6 +202,12 @@ impl Updateable<Ball> for GameState {
         }
         else {
             ball.position = new_position;
+        }
+
+        if ball.position.y - ball.size > canvas_size.y {
+            self.lives = max(self.lives, 1) - 1;
+            ball.position.x = 100f32;
+            ball.position.y = 100f32;
         }
 
         return Ok(());
@@ -227,6 +236,7 @@ pub struct GameState {
     pub bricks : Vec<Brick>,
     pub last_time : f64,
     pub score : u32,
+    pub lives : u32,
     pub collision : Option<Collision>
 }
 
@@ -242,7 +252,8 @@ impl GameState {
             bricks: bricks,
             last_time: last_time,
             collision: None,
-            score: 0
+            score: 0,
+            lives: 4
         }
     }
 }
@@ -320,22 +331,12 @@ pub fn init_overlay(
 
     create_style_element(&document, include_str!("game.css"), "game-css")?;
 
-
-    let score = document.create_element("span")?;
-    let score = score.dyn_into::<web_sys::HtmlElement>()
-        .map_err(|_| ())
-        .unwrap();
-    
-    score.set_id("score");
-    score.style().set_property("position", "absolute")?;
-    score.style().set_property("bottom", "0px")?;
-    score.style().set_property("width", "100%")?;
-    score.style().set_property("text-align", "center")?;
-    score.style().set_property("font-family", "Helvetica, Arial, sans-serif")?;
-    score.style().set_property("font-size", "48px")?;
-
+    let score = create_html_element(&document, "span", "footer-score")?;
     score.set_inner_html("0");
+    let lives = create_html_element(&document, "span", "footer-lives")?;
+    lives.set_inner_html("");
     overlay.append_child(&score)?;
+    overlay.append_child(&lives)?;
 
     return Ok(());
 }
@@ -347,13 +348,22 @@ pub fn update_overlay(
 
     let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
 
-    if let Some(score) = document.get_element_by_id("score") {
+    if let Some(score) = document.get_element_by_id("footer-score") {
         let score = score.dyn_into::<web_sys::HtmlElement>()
             .map_err(|_| ())
             .unwrap();
 
         let score_str = game_state.score.to_string();
         score.set_inner_html(&score_str[..]);
+    }
+
+    if let Some(lives) = document.get_element_by_id("footer-lives") {
+        let lives = lives.dyn_into::<web_sys::HtmlElement>()
+            .map_err(|_| ())
+            .unwrap();
+
+        let lives_str =  "❤".repeat(game_state.lives as usize);
+        lives.set_inner_html(&lives_str[..]);
     }
 
     return Ok(());
