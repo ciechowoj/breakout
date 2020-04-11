@@ -3,7 +3,9 @@ use crate::utils::*;
 use crate::collision::*;
 use std::mem::*;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use web_sys::CanvasRenderingContext2d;
+use web_sys::*;
 
 pub fn fmin(a: f32, b: f32) -> f32 { if a < b { a } else { b } }
 pub fn fmax(a: f32, b: f32) -> f32 { if a < b { b } else { a } }
@@ -163,7 +165,8 @@ impl Updateable<Ball> for GameState {
                     brick.position,
                     brick.size * 0.5) {
                     outer_collision = Some(collision);
-                    brick.destruction_time = Some(0f32)
+                    brick.destruction_time = Some(0f32);
+                    self.score += 1;
                 }
             }
         }
@@ -203,7 +206,7 @@ impl Updateable<Ball> for GameState {
 impl Updateable<Brick> for GameState {
     fn update(
         &mut self,
-        canvas_size : Vec2,
+        _canvas_size : Vec2,
         elapsed : f32) -> Expected<()> {
 
         for brick in &mut self.bricks {
@@ -221,6 +224,7 @@ pub struct GameState {
     pub ball : Ball,
     pub bricks : Vec<Brick>,
     pub last_time : f64,
+    pub score : u32,
     pub collision : Option<Collision>
 }
 
@@ -235,7 +239,8 @@ impl GameState {
             ball: ball,
             bricks: bricks,
             last_time: last_time,
-            collision: None
+            collision: None,
+            score: 0
         }
     }
 }
@@ -302,6 +307,51 @@ pub fn update_bat_input(
     && bat.input.y == expected_input.unwrap().y {
         bat.input = new_input;
     }
+}
+
+pub fn init_overlay(
+    game_state : &mut GameState,
+    overlay : &HtmlElement,
+    time : f64) -> Expected<()> {
+
+    let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
+
+    let score = document.create_element("span")?;
+    let score = score.dyn_into::<web_sys::HtmlElement>()
+        .map_err(|_| ())
+        .unwrap();
+    
+    score.set_id("score");
+    score.style().set_property("position", "absolute")?;
+    score.style().set_property("bottom", "0px")?;
+    score.style().set_property("width", "100%")?;
+    score.style().set_property("text-align", "center")?;
+    score.style().set_property("font-family", "Helvetica, Arial, sans-serif")?;
+    score.style().set_property("font-size", "48px")?;
+
+    score.set_inner_html("0");
+    overlay.append_child(&score)?;
+
+    return Ok(());
+}
+
+pub fn update_overlay(
+    game_state : &mut GameState,
+    overlay : &HtmlElement,
+    time : f64) -> Expected<()> {
+
+    let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
+
+    if let Some(score) = document.get_element_by_id("score") {
+        let score = score.dyn_into::<web_sys::HtmlElement>()
+            .map_err(|_| ())
+            .unwrap();
+
+        let score_str = game_state.score.to_string();
+        score.set_inner_html(&score_str[..]);
+    }
+
+    return Ok(());
 }
 
 pub fn update(

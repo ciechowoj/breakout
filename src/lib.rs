@@ -59,7 +59,20 @@ pub fn greet() {
         return Ok(());
     }
 
-    fn set_canvas_style(canvas : &HtmlCanvasElement) -> Expected<()> {
+    fn set_canvas_style(canvas : &HtmlElement) -> Expected<()> {
+        canvas.style().set_property("border", "none")?;
+        canvas.style().set_property("width", "100%")?;
+        canvas.style().set_property("height", "100%")?;
+        canvas.style().set_property("margin-left", "0px")?;
+        canvas.style().set_property("margin-right", "0px")?;
+        canvas.style().set_property("padding-left", "0px")?;
+        canvas.style().set_property("padding-right", "0px")?;
+        canvas.style().set_property("display", "block")?;
+        canvas.style().set_property("position", "absolute")?;
+        return Ok(());
+    }
+
+    fn set_outer_div_style(canvas : &HtmlElement) -> Expected<()> {
         canvas.style().set_property("border", "none")?;
         canvas.style().set_property("min-width", "1000px")?;
         canvas.style().set_property("width", "1000px")?;
@@ -69,6 +82,7 @@ pub fn greet() {
         canvas.style().set_property("padding-left", "0px")?;
         canvas.style().set_property("padding-right", "0px")?;
         canvas.style().set_property("display", "block")?;
+        canvas.style().set_property("position", "relative")?;
         return Ok(());
     }
 
@@ -76,7 +90,8 @@ pub fn greet() {
         value: Rc<dyn Fn(Rc<Recursive>)>,
         context: RefCell<Box<dyn Any>>,
         events: Rc<RefCell<Vec<InputEvent>>>,
-        performance: Performance
+        performance: Performance,
+        overlay: HtmlElement
     };
 
     fn bind_event_handlers(
@@ -169,6 +184,7 @@ pub fn greet() {
     fn setup_main_loop(
         document : &Document,
         canvas : &HtmlCanvasElement,
+        overlay : HtmlElement,
         window : Window) -> Expected<()> {
     
         let performance = window.performance().expect("performance should be available");
@@ -191,6 +207,7 @@ pub fn greet() {
                         &mut update.context.borrow_mut(),
                         &update.events.borrow(),
                         &rendering_context,
+                        &update.overlay,
                         time).unwrap();
     
                     update.events.borrow_mut().clear();
@@ -213,7 +230,8 @@ pub fn greet() {
             value: update_clone.clone(),
             context: RefCell::new(Box::new(())),
             events: Rc::new(RefCell::new(Vec::new())),
-            performance: performance
+            performance: performance,
+            overlay: overlay
         });
     
         bind_event_handlers(
@@ -244,6 +262,13 @@ pub fn greet() {
     let body = document.body().expect("document should have a body");
     set_body_style(&body).unwrap();
     
+    let outer_div = document.create_element("div").unwrap();
+    let outer_div = outer_div.dyn_into::<web_sys::HtmlElement>()
+        .map_err(|_| ())
+        .unwrap();
+    set_outer_div_style(&outer_div).unwrap();
+    body.append_child(&outer_div).ok();
+
     let canvas = document.create_element("canvas").unwrap();
     let canvas = canvas.dyn_into::<web_sys::HtmlCanvasElement>()
         .map_err(|_| ())
@@ -251,16 +276,24 @@ pub fn greet() {
 
     reset_canvas_size(&canvas).unwrap();
     set_canvas_style(&canvas).unwrap();
-
-    body.append_child(&canvas).ok();
-
-    setup_main_loop(&document, &canvas, window).unwrap();
+    
+    outer_div.append_child(&canvas).ok();
+    
+    let overlay = document.create_element("div").unwrap();
+    let overlay = overlay.dyn_into::<web_sys::HtmlElement>()
+        .map_err(|_| ())
+        .unwrap();
+    set_canvas_style(&overlay).unwrap();
+    outer_div.append_child(&overlay).ok();
+        
+    setup_main_loop(&document, &canvas, overlay, window).unwrap();
 }
 
 pub fn update(
     context : &mut Box<dyn Any>,
     input_events : &Vec<InputEvent>,
     rendering_context : &CanvasRenderingContext2d,
+    overlay : &HtmlElement,
     time : f64) -> Expected<()> {
     
     let canvas = rendering_context.canvas()
@@ -270,8 +303,6 @@ pub fn update(
     let mut height = canvas.height();
     let scroll_width = canvas.scroll_width() as u32;
     let scroll_height = canvas.scroll_height() as u32;
-
-    // log!("{} {} - {} {}", width, height, scroll_width, scroll_height);
 
     if width != scroll_width || height != scroll_height {
         reset_canvas_size(&canvas)?;
@@ -285,12 +316,16 @@ pub fn update(
 
     if game_state.is_none() {
         *context = Box::new(init(canvas_size, time));
+        let game_state = context.downcast_mut::<GameState>()
+            .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;;
+        game::init_overlay(game_state, overlay, time)?;
     }
 
     let game_state = context.downcast_mut::<GameState>()
         .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
 
     game::update(game_state, input_events, canvas_size, time)?;
+    game::update_overlay(game_state, overlay, time)?;
     game::render(game_state, rendering_context, canvas_size, time)?;
 
     return Ok(());
