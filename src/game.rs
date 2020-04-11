@@ -104,7 +104,7 @@ impl Renderable for Brick {
 impl Updateable<Bat> for GameState {
     fn update(
         &mut self,
-        canvas_size : Vec2,
+        _canvas_size : Vec2,
         elapsed : f32) -> Expected<()> {
 
         let bat = &mut self.bat;
@@ -119,6 +119,7 @@ impl Updateable<Ball> for GameState {
         canvas_size : Vec2,
         elapsed : f32) -> Expected<()> {
         
+        let bat = &mut self.bat;
         let ball = &mut self.ball;
         let new_position = ball.position + ball.velocity * elapsed;
         let mut outer_collision : Option<Collision> = None;
@@ -132,6 +133,24 @@ impl Updateable<Ball> for GameState {
                 brick.size * 0.5) {
                 outer_collision = Some(collision);
             }
+        }
+
+        if let Some(collision) = resolve_circle_aabb_collision(
+            ball.position,
+            new_position, 
+            ball.size,
+            bat.position,
+            bat.size * 0.5) {
+            outer_collision = Some(collision);
+        }
+
+        if let Some(collision) = resolve_circle_aabb_inv_collision(
+            ball.position,
+            new_position, 
+            ball.size,
+            canvas_size * 0.5,
+            canvas_size * 0.5) {
+            outer_collision = Some(collision);
         }
 
         // log!("before: {}, {} / {}, {}", ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y);
@@ -152,13 +171,13 @@ impl Updateable<Ball> for GameState {
 
         log!("after: {}, {} / {}, {}", ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y);
 
-        if ball.position.x > canvas_size.x || ball.position.x < 0.0 {
+        /*if ball.position.x > canvas_size.x || ball.position.x < 0.0 {
             ball.velocity.x *= -1.0;
         }
 
         if ball.position.y > canvas_size.y as f32 || ball.position.y < 0.0 {
             ball.velocity.y *= -1.0;
-        }
+        }*/
 
         return Ok(());
     }
@@ -205,29 +224,30 @@ pub fn init(
 
     let bat = Bat { 
         position: bat_position,
-        velocity: vec2(400.0, 400.0),
-        size: vec2(100.0, 20.0),
+        velocity: vec2(1000.0, 1000.0),
+        size: vec2(200.0, 20.0),
         input: vec2(0.0, 0.0)
     };
 
     let ball = Ball::new(
-        bat_position - vec2(0.0, 50.0),
-        vec2(3000.0, -3000.0),
+        bat_position - vec2(50.0, 0.0),
+        // vec2(0.0, 0.0), 
+        vec2(100.0, 0.0),
         30.0);
 
     let mut bricks : Vec<Brick> = vec![];
 
-    let bricks_cols = 2;
-    let bricks_rows = 2;
-    let brick_size = vec2(64f32, 32f32) * 4.0;
-    let brick_spacing = vec2(100f32, 100f32);
+    let bricks_cols = 10;
+    let bricks_rows = 5;
+    let brick_size = vec2(80f32, 40f32);
+    let brick_spacing = vec2(20f32, 20f32);
 
     let bricks_size = vec2(
         bricks_cols as f32 * (brick_size.x + brick_spacing.x) - brick_spacing.x,
         bricks_rows as f32 * (brick_size.y + brick_spacing.y) - brick_spacing.y
     );
 
-    let bricks_origin = bat_position - vec2(0.0, 400.0) - bricks_size * 0.5;
+    let bricks_origin = bat_position - vec2(0.0, 800.0) - bricks_size * 0.5;
     let brick_origin = brick_size * 0.5;
 
     for y in 0..bricks_rows {
@@ -266,8 +286,6 @@ pub fn update(
     canvas_size : Vec2,
     time : f64) -> Expected<()> {
 
-    let elapsed = time - game_state.last_time;
-
     for event in input_events {
         match event {
             InputEvent::KeyDown { time, code } => {
@@ -293,7 +311,7 @@ pub fn update(
                 // game_state.ball.position.x = *x as f32;
                 // game_state.ball.position.y = *y as f32;
 
-                // log!("Mouse moved to position {:.2} {:.2} at time {:.2}!", x, y, time);
+                log!("Mouse moved to position {:.2} {:.2} at time {:.2}!", x, y, time);
             }
         }
     }
@@ -301,8 +319,8 @@ pub fn update(
     let epsilon = 0.01f32;
     let mut current = game_state.last_time;
     while (epsilon as f64) < time - current {
-        Updateable::<Bat>::update(game_state, canvas_size, epsilon)?;
         Updateable::<Ball>::update(game_state, canvas_size, epsilon)?;
+        Updateable::<Bat>::update(game_state, canvas_size, epsilon)?;
         Updateable::<Brick>::update(game_state, canvas_size, epsilon)?;
         current += epsilon as f64;
     }
