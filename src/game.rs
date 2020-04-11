@@ -67,8 +67,7 @@ impl Ball {
     pub fn new(
         position : Vec2,
         velocity : Vec2,
-        size : f32) -> Ball
-    {
+        size : f32) -> Ball {
         Ball {
             position: position,
             velocity: velocity,
@@ -78,7 +77,23 @@ impl Ball {
     }
 }
 
-pub struct Brick { pub position : Vec2, pub size : Vec2 }
+pub struct Brick { 
+    pub position : Vec2, 
+    pub size : Vec2,
+    pub destruction_time : Option<f32>,
+}
+
+impl Brick {
+    pub fn new(
+        position : Vec2,
+        size : Vec2) -> Brick {
+        Brick {
+            position: position,
+            size: size,
+            destruction_time: None
+        }
+    }
+}
 
 impl Renderable for Bat {
     fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
@@ -98,9 +113,16 @@ impl Renderable for Ball {
 
 impl Renderable for Brick {
     fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
-        let origin = self.position - self.size * 0.5;
-        rendering_context.set_fill_style(&JsValue::from_str("black"));
-        rendering_context.fill_rect(origin.x as f64, origin.y as f64, self.size.x as f64, self.size.y as f64);
+        let size = self.size * (1f32 - fmin(1f32, self.destruction_time.unwrap_or(0f32)));
+
+        let origin = self.position - size * 0.5;
+
+        match self.destruction_time {
+            Some(_) => rendering_context.set_fill_style(&JsValue::from_str("red")),
+            None => rendering_context.set_fill_style(&JsValue::from_str("black"))
+        }
+
+        rendering_context.fill_rect(origin.x as f64, origin.y as f64, size.x as f64, size.y as f64);
         return Ok(());
     }
 }
@@ -132,14 +154,17 @@ impl Updateable<Ball> for GameState {
         let new_position = ball.position + ball.velocity * elapsed;
         let mut outer_collision : Option<Collision> = None;
 
-        for brick in &self.bricks {
-            if let Some(collision) = resolve_circle_aabb_collision(
-                ball.position,
-                new_position, 
-                ball.size,
-                brick.position,
-                brick.size * 0.5) {
-                outer_collision = Some(collision);
+        for brick in &mut self.bricks {
+            if let None = brick.destruction_time {
+                if let Some(collision) = resolve_circle_aabb_collision(
+                    ball.position,
+                    new_position, 
+                    ball.size,
+                    brick.position,
+                    brick.size * 0.5) {
+                    outer_collision = Some(collision);
+                    brick.destruction_time = Some(0f32)
+                }
             }
         }
 
@@ -161,13 +186,8 @@ impl Updateable<Ball> for GameState {
             outer_collision = Some(collision);
         }
 
-        // log!("before: {}, {} / {}, {}", ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y);
-
         if let Some(collision) = outer_collision {
             let reflected = reflect(ball.velocity, collision.normal);
-            log!("normal: {}, {} / t: {}", collision.normal.x, collision.normal.y, collision.t);
-            log!("normal: {}, {} / t: {}", collision.normal.x, collision.normal.y, collision.t);
-
             ball.position = ball.position + ball.velocity * elapsed * collision.t + reflected * elapsed* (1.0 - collision.t);
             ball.velocity = reflected;
             self.collision = outer_collision.clone();
@@ -175,17 +195,6 @@ impl Updateable<Ball> for GameState {
         else {
             ball.position = new_position;
         }
-        
-
-        log!("after: {}, {} / {}, {}", ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y);
-
-        /*if ball.position.x > canvas_size.x || ball.position.x < 0.0 {
-            ball.velocity.x *= -1.0;
-        }
-
-        if ball.position.y > canvas_size.y as f32 || ball.position.y < 0.0 {
-            ball.velocity.y *= -1.0;
-        }*/
 
         return Ok(());
     }
@@ -194,8 +203,15 @@ impl Updateable<Ball> for GameState {
 impl Updateable<Brick> for GameState {
     fn update(
         &mut self,
-        _canvas_size : Vec2,
-        _elapsed : f32) -> Expected<()> {
+        canvas_size : Vec2,
+        elapsed : f32) -> Expected<()> {
+
+        for brick in &mut self.bricks {
+            if let Some(destruction_time) = brick.destruction_time {
+                brick.destruction_time = Some(destruction_time + elapsed);
+            }
+        }
+
         return Ok(());
     }
 }
@@ -241,7 +257,7 @@ pub fn init(
         bat_position - vec2(0.0, 50.0),
         // vec2(0.0, 0.0), 
         vec2(1000.0, 1000.0),
-        30.0);
+        19.0);
 
     let mut bricks : Vec<Brick> = vec![];
 
@@ -262,10 +278,10 @@ pub fn init(
         for x in 0..bricks_cols {
             let index = vec2(x as f32, y as f32);
             
-            let brick = Brick {
-                position: bricks_origin + mul(brick_size + brick_spacing, index) + brick_origin,
-                size: brick_size
-            };
+            let brick = Brick::new(
+                bricks_origin + mul(brick_size + brick_spacing, index) + brick_origin,
+                brick_size
+            );
 
             bricks.push(brick);
         }
@@ -333,12 +349,11 @@ pub fn update(
         current += epsilon as f64;
     }
 
+
     // game_state.ball.colliding = false;
     // game_state.collision = None;
 
     /*for brick in &mut game_state.bricks {
-        
-
         if let Some(collision) = resolve_circle_aabb_collision(
             game_state.bat.position,
             game_state.ball.position, 
@@ -351,7 +366,7 @@ pub fn update(
     }*/
 
     game_state.last_time = current;
-
+    
     return Ok(());
 }
 
@@ -366,26 +381,20 @@ pub fn render(
     rendering_context.set_fill_style(&JsValue::from_str("lightgray"));
     rendering_context.fill_rect(0.0, 0.0, width, height);
 
-    game_state.ball.render(rendering_context)?;
-    game_state.bat.render(rendering_context)?;
-
     for entity in &game_state.bricks {
         entity.render(rendering_context)?;
     }
     
-    if let Some(collision) = &game_state.collision {
+    game_state.ball.render(rendering_context)?;
+    game_state.bat.render(rendering_context)?;
+
+    /* if let Some(collision) = &game_state.collision {
         draw_vector(rendering_context, collision.point, collision.point + collision.normal * 32f32, "green")?;
         draw_circle(rendering_context, collision.point, 3.0, "green")?;
-
         draw_vector(rendering_context, collision.point, collision.point + game_state.ball.velocity, "blue")?;
-
         let reflected = reflect(-game_state.ball.velocity, collision.normal) * (1.0 - collision.t);
-
-        
-
         draw_vector(rendering_context, collision.point, collision.point + reflected, "yellow")?;
-
-    }
+    }*/
 
     return Ok(());
 }

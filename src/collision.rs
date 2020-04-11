@@ -165,9 +165,6 @@ pub fn resolve_circle_aabb_inv_collision(
         aabb_radius : Vec2) -> Option<(Vec2, Vec2)> {
         let max_dist = aabb_radius - vec2(circle_radius, circle_radius);
         let dist = abs(&(circle_origin - aabb_origin));
-        
-        log!("{}, {}", aabb_origin, aabb_radius);
-        log!("{}, {}", dist, max_dist);
 
         if dist.x >= max_dist.x || dist.y >= max_dist.y {
             let left = aabb_origin.x - aabb_radius.x;
