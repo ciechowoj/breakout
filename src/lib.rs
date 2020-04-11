@@ -91,7 +91,8 @@ pub fn greet() {
         context: RefCell<Box<dyn Any>>,
         events: Rc<RefCell<Vec<InputEvent>>>,
         performance: Performance,
-        overlay: HtmlElement
+        overlay: HtmlElement,
+        last_time: f64
     };
 
     fn bind_event_handlers(
