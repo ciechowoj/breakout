@@ -132,18 +132,17 @@ impl Updateable<Ball> for GameState {
                 brick.size * 0.5) {
                 outer_collision = Some(collision);
             }
-            else {
-                ball.position = new_position;
-            }
         }
 
         // log!("before: {}, {} / {}, {}", ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y);
 
         if let Some(collision) = outer_collision {
             let reflected = reflect(ball.velocity, collision.normal);
+            log!("normal: {}, {} / t: {}", collision.normal.x, collision.normal.y, collision.t);
+            log!("normal: {}, {} / t: {}", collision.normal.x, collision.normal.y, collision.t);
+
             ball.position = ball.position + ball.velocity * elapsed * collision.t + reflected * elapsed* (1.0 - collision.t);
             ball.velocity = reflected;
-            // ball.position += ball.velocity * elapsed;
             self.collision = outer_collision.clone();
         }
         else {
@@ -151,7 +150,7 @@ impl Updateable<Ball> for GameState {
         }
         
 
-        // log!("after: {}, {} / {}, {}", ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y);
+        log!("after: {}, {} / {}, {}", ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y);
 
         if ball.position.x > canvas_size.x || ball.position.x < 0.0 {
             ball.velocity.x *= -1.0;
@@ -213,7 +212,7 @@ pub fn init(
 
     let ball = Ball::new(
         bat_position - vec2(0.0, 50.0),
-        vec2(1000.0, -1000.0),
+        vec2(3000.0, -3000.0),
         30.0);
 
     let mut bricks : Vec<Brick> = vec![];
@@ -299,10 +298,15 @@ pub fn update(
         }
     }
 
-    Updateable::<Bat>::update(game_state, canvas_size, elapsed as f32)?;
-    Updateable::<Ball>::update(game_state, canvas_size, elapsed as f32)?;
-    Updateable::<Brick>::update(game_state, canvas_size, elapsed as f32)?;
-    
+    let epsilon = 0.01f32;
+    let mut current = game_state.last_time;
+    while (epsilon as f64) < time - current {
+        Updateable::<Bat>::update(game_state, canvas_size, epsilon)?;
+        Updateable::<Ball>::update(game_state, canvas_size, epsilon)?;
+        Updateable::<Brick>::update(game_state, canvas_size, epsilon)?;
+        current += epsilon as f64;
+    }
+
     // game_state.ball.colliding = false;
     // game_state.collision = None;
 
@@ -320,7 +324,7 @@ pub fn update(
         }
     }*/
 
-    game_state.last_time = time;
+    game_state.last_time = current;
 
     return Ok(());
 }
