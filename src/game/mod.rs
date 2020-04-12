@@ -5,7 +5,7 @@ use crate::utils::*;
 use crate::collision::*;
 use crate::dom_utils::*;
 use std::mem::*;
-use std::cmp::{max, min};
+use std::cmp::{max};
 use std::include_str;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -68,7 +68,8 @@ pub struct Ball {
     pub position : Vec2,
     pub velocity : Vec2,
     pub size : f32,
-    pub colliding : bool
+    pub colliding : bool,
+    pub freeze_time : Option<f32>
 }
 
 impl Ball {
@@ -77,7 +78,8 @@ impl Ball {
             position: vec2(0f32, 0f32),
             velocity: vec2(0f32, 0f32),
             size: config::BALL_START_SIZE,
-            colliding: false
+            colliding: false,
+            freeze_time: None
         };
 
         ball.reset_position(canvas_size);
@@ -92,6 +94,12 @@ impl Ball {
 
         self.position = mul(ball_start_position, canvas_size);
         self.velocity = ball_start_direction * config::BALL_VELOCITY;
+
+        self.freeze_time = Some(0f32);
+    }
+
+    pub fn effective_velocity(&self) -> Vec2 {
+        return self.velocity * match self.freeze_time { Some(_) => 0f32, None => 1f32 };
     }
 }
 
@@ -124,7 +132,12 @@ impl Renderable for Bat {
 
 impl Renderable for Ball {
     fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
-        draw_circle(rendering_context, self.position, self.size, if self.colliding { "red" } else { "black" })?;
+        let color = match self.freeze_time {
+            Some(_) => "grey",
+            None => if self.colliding { "red" } else { "black" }
+        };
+
+        draw_circle(rendering_context, self.position, self.size, color)?;
         return Ok(());
     }
 }
@@ -169,8 +182,13 @@ impl Updateable<Ball> for GameState {
         
         let bat = &mut self.bat;
         let ball = &mut self.ball;
-        let new_position = ball.position + ball.velocity * elapsed;
+        let new_position = ball.position + ball.effective_velocity() * elapsed;
         let mut outer_collision : Option<Collision> = None;
+
+        ball.freeze_time = match ball.freeze_time {
+            Some(time) => if time > config::BALL_FREEZE_TIME { None } else { Some(time + elapsed) },
+            None => None
+        };
 
         for brick in &mut self.bricks {
             if let None = brick.destruction_time {

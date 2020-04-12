@@ -1,5 +1,5 @@
 
-- Reset position of the ball
+✓ Reset position of the ball
 - Infinite amount of bricks (moving when the bottom row is destroyed)
 - Increase speed every time the row at the bottom is destroyed
 - Bonuses (the bonus is visible on the brick)
