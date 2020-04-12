@@ -8,7 +8,7 @@ pub const BALL_START_Y : f32 = 0.75f32;
 pub const BALL_START_ANGLE : f32 = PI * 0.7f32;
 pub const BALL_FREEZE_TIME : f32 = 1f32;
 
-pub const BRICKS_FALLING_VELOCITY : f32 = 10f32;
+pub const BRICKS_FALLING_VELOCITY : f32 = 91f32;
 pub const NUM_BRICK_COLS : u32 = 10;
 pub const NUM_BRICK_ROWS : u32 = 10;
 pub const BRICK_SPACING : f32 = 10f32;

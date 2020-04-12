@@ -228,6 +228,18 @@ impl Updateable<Ball> for GameState {
     }
 }
 
+impl Updateable<Brick> for GameState {
+    fn update(
+        &mut self,
+        _canvas_size : Vec2,
+        elapsed : f32) -> Expected<()> {
+
+        self.bricks.update(elapsed);
+
+        return Ok(());
+    }
+}
+
 pub struct GameState {
     pub bat : Bat,
     pub ball : Ball,
@@ -360,6 +372,7 @@ pub fn update(
                 match code {
                     KeyCode::ArrowLeft => { update_bat_input(game_state, Some(vec2(-1.0, 0.0)), vec2(0.0, 0.0)) }
                     KeyCode::ArrowRight => { update_bat_input(game_state, Some(vec2(1.0, 0.0)), vec2(0.0, 0.0)) }
+                    KeyCode::Space => { game_state.bricks.reset_last_row() }
                     _ => {}
                 }
 
