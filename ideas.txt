@@ -1,13 +1,21 @@
 
 ✓ Reset position of the ball
-- Infinite amount of bricks (moving when the bottom row is destroyed)
+✓ Infinite amount of bricks (moving when the bottom row is destroyed)
+    - Numerical stability improvement
+    - Muve multiple rows at the same time
+
 - Increase speed every time the row at the bottom is destroyed
-- Bonuses (the bonus is visible on the brick)
+- Blinking last life
+- Game over screen
+- Score board
+    - Local storage/browser storage
+- Bonuses (the bonus is visible on the brick, the bonus is a new ball it's not falling down but is following some trajectory)
     - Widen/shorten
     - Extra balls (collisions between balls)
     - Double points
     - Temporal slow down/speed up
     - Future prediction
+    - Blockage (effortless gameplay)
 - Motion blur
 - Bent bat
 - Pause ?
