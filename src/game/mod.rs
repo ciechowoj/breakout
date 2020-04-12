@@ -1,9 +1,11 @@
 mod config;
+mod bricks;
 
 use glm::*;
 use crate::utils::*;
 use crate::collision::*;
 use crate::dom_utils::*;
+use crate::game::bricks::*;
 use std::mem::*;
 use std::cmp::{max};
 use std::include_str;
@@ -103,24 +105,6 @@ impl Ball {
     }
 }
 
-pub struct Brick { 
-    pub position : Vec2, 
-    pub size : Vec2,
-    pub destruction_time : Option<f32>,
-}
-
-impl Brick {
-    pub fn new(
-        position : Vec2,
-        size : Vec2) -> Brick {
-        Brick {
-            position: position,
-            size: size,
-            destruction_time: None
-        }
-    }
-}
-
 impl Renderable for Bat {
     fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
         let origin = self.position - self.size * 0.5;
@@ -190,7 +174,7 @@ impl Updateable<Ball> for GameState {
             None => None
         };
 
-        for brick in &mut self.bricks {
+        for brick in &mut self.bricks.bricks {
             if let None = brick.destruction_time {
                 if let Some(collision) = resolve_circle_aabb_collision(
                     ball.position,
@@ -244,26 +228,10 @@ impl Updateable<Ball> for GameState {
     }
 }
 
-impl Updateable<Brick> for GameState {
-    fn update(
-        &mut self,
-        _canvas_size : Vec2,
-        elapsed : f32) -> Expected<()> {
-
-        for brick in &mut self.bricks {
-            if let Some(destruction_time) = brick.destruction_time {
-                brick.destruction_time = Some(destruction_time + elapsed);
-            }
-        }
-
-        return Ok(());
-    }
-}
-
 pub struct GameState {
     pub bat : Bat,
     pub ball : Ball,
-    pub bricks : Vec<Brick>,
+    pub bricks : Bricks,
     pub last_time : f64,
     pub score : u32,
     pub lives : u32,
@@ -274,7 +242,7 @@ impl GameState {
     pub fn new(
         bat : Bat,
         ball : Ball,
-        bricks : Vec<Brick>,
+        bricks : Bricks,
         last_time : f64) -> GameState {
         GameState {
             bat: bat,
@@ -305,33 +273,7 @@ pub fn init(
 
     ball.reset_position(canvas_size);
 
-    let mut bricks : Vec<Brick> = vec![];
-
-    let bricks_cols = 10;
-    let bricks_rows = 5;
-    let brick_size = vec2(80f32, 40f32);
-    let brick_spacing = vec2(20f32, 20f32);
-
-    let bricks_size = vec2(
-        bricks_cols as f32 * (brick_size.x + brick_spacing.x) - brick_spacing.x,
-        bricks_rows as f32 * (brick_size.y + brick_spacing.y) - brick_spacing.y
-    );
-
-    let bricks_origin = bat_position - vec2(0.0, 800.0) - bricks_size * 0.5;
-    let brick_origin = brick_size * 0.5;
-
-    for y in 0..bricks_rows {
-        for x in 0..bricks_cols {
-            let index = vec2(x as f32, y as f32);
-            
-            let brick = Brick::new(
-                bricks_origin + mul(brick_size + brick_spacing, index) + brick_origin,
-                brick_size
-            );
-
-            bricks.push(brick);
-        }
-    }
+    let bricks = Bricks::new(canvas_size);
 
     GameState::new(bat, ball, bricks, time)
 }
@@ -340,7 +282,6 @@ pub fn update_bat_input(
     game_state : &mut GameState,
     expected_input: Option<Vec2>,
     new_input : Vec2) {
-    
     let bat = &mut game_state.bat;
 
     if expected_input.is_none() 
@@ -474,7 +415,7 @@ pub fn render(
     rendering_context.set_fill_style(&JsValue::from_str("lightgray"));
     rendering_context.fill_rect(0.0, 0.0, width, height);
 
-    for entity in &game_state.bricks {
+    for entity in &game_state.bricks.bricks {
         entity.render(rendering_context)?;
     }
     
