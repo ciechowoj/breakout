@@ -1,3 +1,5 @@
+mod config;
+
 use glm::*;
 use crate::utils::*;
 use crate::collision::*;
@@ -8,6 +10,7 @@ use std::include_str;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::*;
+use js_sys::Math::random;
 
 pub fn fmin(a: f32, b: f32) -> f32 { if a < b { a } else { b } }
 pub fn fmax(a: f32, b: f32) -> f32 { if a < b { b } else { a } }
@@ -69,16 +72,26 @@ pub struct Ball {
 }
 
 impl Ball {
-    pub fn new(
-        position : Vec2,
-        velocity : Vec2,
-        size : f32) -> Ball {
-        Ball {
-            position: position,
-            velocity: velocity,
-            size: size,
+    pub fn new(canvas_size : Vec2) -> Ball {
+        let mut ball = Ball {
+            position: vec2(0f32, 0f32),
+            velocity: vec2(0f32, 0f32),
+            size: config::BALL_START_SIZE,
             colliding: false
-        }
+        };
+
+        ball.reset_position(canvas_size);
+
+        return ball;
+    }
+
+    pub fn reset_position(&mut self, canvas_size : Vec2) {
+        let ball_start_position = vec2(config::BALL_START_X, config::BALL_START_Y);
+        let ball_start_angle = config::BALL_START_ANGLE * (random() as f32 - 0.5f32);
+        let ball_start_direction = rotate_vec2(&vec2(0f32, -1f32), ball_start_angle);
+
+        self.position = mul(ball_start_position, canvas_size);
+        self.velocity = ball_start_direction * config::BALL_VELOCITY;
     }
 }
 
@@ -206,8 +219,7 @@ impl Updateable<Ball> for GameState {
 
         if ball.position.y - ball.size > canvas_size.y {
             self.lives = max(self.lives, 1) - 1;
-            ball.position.x = 100f32;
-            ball.position.y = 100f32;
+            ball.reset_position(canvas_size);
         }
 
         return Ok(());
@@ -271,11 +283,9 @@ pub fn init(
         input: vec2(0.0, 0.0)
     };
 
-    let ball = Ball::new(
-        bat_position - vec2(0.0, 50.0),
-        // vec2(0.0, 0.0), 
-        vec2(1000.0, 1000.0),
-        19.0);
+    let mut ball = Ball::new(canvas_size);
+
+    ball.reset_position(canvas_size);
 
     let mut bricks : Vec<Brick> = vec![];
 
