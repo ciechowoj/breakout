@@ -1,0 +1,22 @@
+
+- Reset position of the ball
+- Infinite amount of bricks (moving when the bottom row is destroyed)
+- Increase speed every time the row at the bottom is destroyed
+- Bonuses (the bonus is visible on the brick)
+    - Widen/shorten
+    - Extra balls (collisions between balls)
+    - Double points
+    - Temporal slow down/speed up
+    - Future prediction
+- Motion blur
+- Bent bat
+- Pause ?
+- Add music / sfx 
+
+- Publish on the internet
+    - Add adds
+    - Buy domain
+    - Buy hosting
+
+- High scores
+
