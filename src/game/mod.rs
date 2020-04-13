@@ -463,6 +463,10 @@ pub fn update(
                     KeyCode::Enter => {   
                         match game_state.stage {
                             GameStage::ScoreBoard => {
+                                if let Some(name) = player_name()? {
+                                    persist_score(name, game_state.score)?;
+                                }
+
                                 *game_state = init(canvas_size, time);
                             },
                             _ => {}

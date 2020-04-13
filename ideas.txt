@@ -7,8 +7,9 @@
 - Increase speed every time the row at the bottom is destroyed
 - Blinking last life
 ✓ Game over screen
-- Score board
-    - Local storage/browser storage
+✓ Score board
+    ✓ Local storage/browser storage
+    - Set focus to edit box
 - Bonuses (the bonus is visible on the brick, the bonus is a new ball it's not falling down but is following some trajectory)
     - Widen/shorten
     - Extra balls (collisions between balls)

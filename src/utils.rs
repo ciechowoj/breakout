@@ -1,5 +1,6 @@
 use std::num::*;
 use wasm_bindgen::prelude::*;
+use serde_json;
 
 pub fn set_panic_hook() {
     // When the `console_error_panic_hook` feature is enabled, we can call the
@@ -206,6 +207,12 @@ impl From<JsValue> for Error {
 
 impl From<strum::ParseError> for Error {
     fn from(error: strum::ParseError) -> Self {
+        Error::Str(error.to_string())
+    }
+}
+
+impl From<serde_json::error::Error> for Error {
+    fn from(error: serde_json::error::Error) -> Self {
         Error::Str(error.to_string())
     }
 }
