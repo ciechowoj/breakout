@@ -2,7 +2,8 @@
 ✓ Reset position of the ball
 ✓ Infinite amount of bricks (moving when the bottom row is destroyed)
     - Numerical stability improvement
-    - Muve multiple rows at the same time
+    - Move multiple rows at the same time
+    - Move *after* the last block dissapears
 
 - Increase speed every time the row at the bottom is destroyed
 - Blinking last life
@@ -10,6 +11,7 @@
 ✓ Score board
     ✓ Local storage/browser storage
     - Set focus to edit box
+    - Store the board in the blob storage
 - Bonuses (the bonus is visible on the brick, the bonus is a new ball it's not falling down but is following some trajectory)
     - Widen/shorten
     - Extra balls (collisions between balls)
@@ -20,12 +22,14 @@
 - Motion blur
 - Bent bat
 - Pause ?
-- Add music / sfx 
+- Add music / sfx
+- Shining bricks effect
+- More kinds of bricks
+- Procedurally generate the bricks (with the same seed value)
 
 - Publish on the internet
     - Add adds
     - Buy domain
     - Buy hosting
 
-- High scores
 
