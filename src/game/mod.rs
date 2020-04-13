@@ -1,6 +1,7 @@
 mod bricks;
 mod config;
 mod utils;
+mod scoreboard;
 
 use glm::*;
 use crate::utils::*;
@@ -8,6 +9,7 @@ use crate::collision::*;
 use crate::dom_utils::*;
 use crate::game::bricks::*;
 use crate::game::utils::*;
+use crate::game::scoreboard::*;
 use std::mem::*;
 use std::cmp::{max};
 use std::include_str;
@@ -261,7 +263,7 @@ pub struct GameState {
     pub bricks : Bricks,
     pub last_time : f64,
     pub time : GameTime,
-    pub score : u32,
+    pub score : u64,
     pub lives : u32,
     pub game_over_time : f64,
     pub collision : Option<Collision>
@@ -337,7 +339,7 @@ pub fn init_overlay(
 
     let lives = create_html_element(&document, "span", "footer-lives")?;
     lives.set_inner_html("");
-    overlay.append_child(&lives)?;    
+    overlay.append_child(&lives)?;
 
     return Ok(());
 }
@@ -348,9 +350,9 @@ pub fn update_game_over(
     overlay : &HtmlElement) -> Expected<()> {
 
     let game_over_id = "game-over";
-    let html_element = try_get_html_element_by_id(document, game_over_id)?;
+    let game_over = try_get_html_element_by_id(document, game_over_id)?;
 
-    match html_element {
+    match game_over {
         Some(element) => {
             match game_state.stage {
                 GameStage::GameOver => {},
@@ -362,9 +364,38 @@ pub fn update_game_over(
         None => {
             match game_state.stage {
                 GameStage::GameOver => {
-                    let game_over = create_html_element(&document, "div", "game-over")?;
+                    let game_over = create_html_element(&document, "div", game_over_id)?;
                     game_over.set_inner_html("<span>Game Over</span>");
                     overlay.append_child(&game_over)?;
+                },
+                _ => {}
+            }
+        }
+    };
+
+    return Ok(());
+}
+
+pub fn update_score_board(
+    document : &Document,
+    game_state : &mut GameState,
+    overlay : &HtmlElement) -> Expected<()> {
+    let score_board_id = "score-board";
+    let score_board = try_get_html_element_by_id(document, score_board_id)?;
+
+    match score_board {
+        Some(element) => {
+            match game_state.stage {
+                GameStage::ScoreBoard => {},
+                _ => {
+                    overlay.remove_child(&element)?;
+                }
+            }
+        },
+        None => {
+            match game_state.stage {
+                GameStage::ScoreBoard => {
+                    create_scoreboard(&document, &overlay, game_state.score)?;
                 },
                 _ => {}
             }
@@ -400,9 +431,8 @@ pub fn update_overlay(
         }
     };
 
-    
-
     update_game_over(&document, game_state, overlay)?;
+    update_score_board(&document, game_state, overlay)?;
 
     return Ok(());
 }
