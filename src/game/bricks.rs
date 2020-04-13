@@ -38,7 +38,6 @@ pub struct BrickConfig {
 impl BrickConfig {
     pub fn new (canvas_size : Vec2) -> BrickConfig {
         let bricks_cols = config::NUM_BRICK_COLS;
-        let bricks_rows = config::NUM_BRICK_ROWS;
         let brick_spacing = config::BRICK_SPACING;
         let brick_width = ((canvas_size.x - brick_spacing) / bricks_cols as f32 - brick_spacing).floor();
         let brick_height = (brick_width * 0.5f32).floor();
@@ -152,8 +151,6 @@ impl Bricks {
             }
         }
 
-        let mut i = 0;
-
         for brick in &mut self.bricks {
             if let Some(destruction_time) = brick.destruction_time {
                 brick.destruction_time = Some(destruction_time + elapsed);
@@ -167,8 +164,6 @@ impl Bricks {
                     brick.position.y += offset;
                 }
             }
-
-            i += 1;
         }
 
         if self.last_row_empty() {

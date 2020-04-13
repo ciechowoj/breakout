@@ -10,7 +10,6 @@ use std::mem::*;
 use std::cmp::{max};
 use std::include_str;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
 use web_sys::*;
 use js_sys::Math::random;
 
@@ -221,7 +220,13 @@ impl Updateable<Ball> for GameState {
 
         if ball.position.y - ball.size > canvas_size.y {
             self.lives = max(self.lives, 1) - 1;
-            ball.reset_position(canvas_size);
+
+            if self.lives != 0 {
+                ball.reset_position(canvas_size);
+            }
+            else {
+                self.stage = GameStage::GameOver;
+            }
         }
 
         return Ok(());
@@ -234,13 +239,20 @@ impl Updateable<Brick> for GameState {
         _canvas_size : Vec2,
         elapsed : f32) -> Expected<()> {
 
-        self.bricks.update(elapsed);
+        self.bricks.update(elapsed)?;
 
         return Ok(());
     }
 }
 
+pub enum GameStage {
+    Gameplay,
+    GameOver,
+    ScoreBoard
+}
+
 pub struct GameState {
+    pub stage : GameStage,
     pub bat : Bat,
     pub ball : Ball,
     pub bricks : Bricks,
@@ -257,13 +269,14 @@ impl GameState {
         bricks : Bricks,
         last_time : f64) -> GameState {
         GameState {
+            stage: GameStage::Gameplay,
             bat: bat,
             ball: ball,
             bricks: bricks,
             last_time: last_time,
             collision: None,
             score: 0,
-            lives: 4
+            lives: 1
         }
     }
 }
@@ -303,21 +316,58 @@ pub fn update_bat_input(
     }
 }
 
+pub fn show_game_over() {
+
+    
+}
+
 pub fn init_overlay(
     _game_state : &mut GameState,
     overlay : &HtmlElement,
     _time : f64) -> Expected<()> {
 
     let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
-
     create_style_element(&document, include_str!("game.css"), "game-css")?;
 
     let score = create_html_element(&document, "span", "footer-score")?;
     score.set_inner_html("0");
+    overlay.append_child(&score)?;
+
     let lives = create_html_element(&document, "span", "footer-lives")?;
     lives.set_inner_html("");
-    overlay.append_child(&score)?;
-    overlay.append_child(&lives)?;
+    overlay.append_child(&lives)?;    
+
+    return Ok(());
+}
+
+pub fn update_game_over(
+    document : &Document,
+    game_state : &mut GameState,
+    overlay : &HtmlElement) -> Expected<()> {
+
+    let game_over_id = "game-over";
+    let html_element = try_get_html_element_by_id(document, game_over_id)?;
+
+    match html_element {
+        Some(element) => {
+            match game_state.stage {
+                GameStage::GameOver => {},
+                _ => {
+                    overlay.remove_child(&element)?;
+                }
+            }
+        },
+        None => {
+            match game_state.stage {
+                GameStage::GameOver => {
+                    let game_over = create_html_element(&document, "div", "game-over")?;
+                    game_over.set_inner_html("<span>Game Over</span>");
+                    overlay.append_child(&game_over)?;
+                },
+                _ => {}
+            }
+        }
+    };
 
     return Ok(());
 }
@@ -329,23 +379,15 @@ pub fn update_overlay(
 
     let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
 
-    if let Some(score) = document.get_element_by_id("footer-score") {
-        let score = score.dyn_into::<web_sys::HtmlElement>()
-            .map_err(|_| ())
-            .unwrap();
+    let score = get_html_element_by_id(&document, "footer-score")?;
+    let score_str = game_state.score.to_string();
+    score.set_inner_html(&score_str[..]);
 
-        let score_str = game_state.score.to_string();
-        score.set_inner_html(&score_str[..]);
-    }
+    let lives = get_html_element_by_id(&document, "footer-lives")?;
+    let lives_str =  "❤".repeat(game_state.lives as usize);
+    lives.set_inner_html(&lives_str[..]);
 
-    if let Some(lives) = document.get_element_by_id("footer-lives") {
-        let lives = lives.dyn_into::<web_sys::HtmlElement>()
-            .map_err(|_| ())
-            .unwrap();
-
-        let lives_str =  "❤".repeat(game_state.lives as usize);
-        lives.set_inner_html(&lives_str[..]);
-    }
+    update_game_over(&document, game_state, overlay)?;
 
     return Ok(());
 }
@@ -390,30 +432,18 @@ pub fn update(
     let epsilon = 0.01f32;
     let mut current = game_state.last_time;
     while (epsilon as f64) < time - current {
-        Updateable::<Ball>::update(game_state, canvas_size, epsilon)?;
-        Updateable::<Bat>::update(game_state, canvas_size, epsilon)?;
+        match game_state.stage {
+            GameStage::Gameplay => {
+                Updateable::<Ball>::update(game_state, canvas_size, epsilon)?;
+                Updateable::<Bat>::update(game_state, canvas_size, epsilon)?;
+            },
+            _ => {}
+        };
         Updateable::<Brick>::update(game_state, canvas_size, epsilon)?;
         current += epsilon as f64;
     }
-
-
-    // game_state.ball.colliding = false;
-    // game_state.collision = None;
-
-    /*for brick in &mut game_state.bricks {
-        if let Some(collision) = resolve_circle_aabb_collision(
-            game_state.bat.position,
-            game_state.ball.position, 
-            game_state.ball.size,
-            brick.position,
-            brick.size * 0.5) {
-            game_state.ball.colliding = true;
-            game_state.collision = Some(collision);
-        }
-    }*/
-
     game_state.last_time = current;
-    
+
     return Ok(());
 }
 
@@ -433,7 +463,11 @@ pub fn render(
     }
     
     game_state.ball.render(rendering_context)?;
-    game_state.bat.render(rendering_context)?;
+
+    match game_state.stage {
+        GameStage::Gameplay => game_state.bat.render(rendering_context)?,
+        _ => ()
+    };
 
     /* if let Some(collision) = &game_state.collision {
         draw_vector(rendering_context, collision.point, collision.point + collision.normal * 32f32, "green")?;

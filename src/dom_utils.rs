@@ -10,6 +10,31 @@ pub fn create_html_element(document : &Document, tag : &str, id : &str) -> Expec
     return Ok(element);
 }
 
+pub fn try_get_html_element_by_id(document : &Document, id : &str) -> Expected<Option<HtmlElement>> {
+    if let Some(element) = document.get_element_by_id(id) {
+        let element = element.dyn_into::<web_sys::HtmlElement>()
+            .map_err(|_| Error::Msg("Failed to cast 'Element' to 'HtmlElement'."))?;
+    
+        return Ok(Some(element));
+    }
+    else {
+        return Ok(None);
+    }
+}
+
+pub fn get_html_element_by_id(document : &Document, id : &str) -> Expected<HtmlElement> {
+    if let Some(element) = document.get_element_by_id(id) {
+        let element = element.dyn_into::<web_sys::HtmlElement>()
+            .map_err(|_| Error::Msg("Failed to cast 'Element' to 'HtmlElement'."))?;
+    
+        return Ok(element);
+    }
+    else {
+        return Err(Error::Msg("There is no html element with specified id!"));
+    }
+}
+
+
 pub fn create_style_element(document : &Document, sheet : &str, id : &str) -> Expected<HtmlStyleElement> {
     let style = create_html_element(&document, "style", id)?;
     let style = style.dyn_into::<HtmlStyleElement>()
