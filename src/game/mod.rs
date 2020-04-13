@@ -382,12 +382,25 @@ pub fn update_overlay(
     let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
 
     let score = get_html_element_by_id(&document, "footer-score")?;
-    let score_str = game_state.score.to_string();
-    score.set_inner_html(&score_str[..]);
-
     let lives = get_html_element_by_id(&document, "footer-lives")?;
-    let lives_str =  "❤".repeat(game_state.lives as usize);
-    lives.set_inner_html(&lives_str[..]);
+
+    match game_state.stage {
+        GameStage::Gameplay | GameStage::GameOver => {
+            let score_str = game_state.score.to_string();
+            score.style().remove_property("display")?;
+            score.set_inner_html(&score_str[..]);
+
+            let lives_str =  "❤".repeat(game_state.lives as usize);
+            lives.style().remove_property("display")?;
+            lives.set_inner_html(&lives_str[..]);
+        },
+        _ => {
+            score.style().set_property("display", "none")?;
+            lives.style().set_property("display", "none")?;
+        }
+    };
+
+    
 
     update_game_over(&document, game_state, overlay)?;
 
@@ -472,12 +485,17 @@ pub fn render(
     rendering_context.set_fill_style(&JsValue::from_str("lightgray"));
     rendering_context.fill_rect(0.0, 0.0, width, height);
 
-    for entity in &game_state.bricks.bricks {
-        entity.render(rendering_context)?;
-    }
+    match game_state.stage {
+        GameStage::Gameplay | GameStage::GameOver => {
+            for entity in &game_state.bricks.bricks {
+                entity.render(rendering_context)?;
+            }
+            
+            game_state.ball.render(rendering_context)?;
+        },
+        _ => ()
+    };
     
-    game_state.ball.render(rendering_context)?;
-
     match game_state.stage {
         GameStage::Gameplay => game_state.bat.render(rendering_context)?,
         _ => ()
