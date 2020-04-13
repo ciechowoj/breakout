@@ -455,11 +455,19 @@ pub fn update(
                 log!("{} key pressed at time {:.2}!", code.as_ref(), time);
                 log!("{}", size_of::<JsValue>());
             },
-            InputEvent::KeyUp { time, code } => {
+            InputEvent::KeyUp { time: _, code } => {
                 match code {
                     KeyCode::ArrowLeft => { update_bat_input(game_state, Some(vec2(-1.0, 0.0)), vec2(0.0, 0.0)) }
                     KeyCode::ArrowRight => { update_bat_input(game_state, Some(vec2(1.0, 0.0)), vec2(0.0, 0.0)) }
                     KeyCode::Space => { game_state.bricks.reset_last_row() }
+                    KeyCode::Enter => {   
+                        match game_state.stage {
+                            GameStage::ScoreBoard => {
+                                *game_state = init(canvas_size, time);
+                            },
+                            _ => {}
+                        }
+                    }
                     _ => {}
                 }
 
