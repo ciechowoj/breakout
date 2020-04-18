@@ -4,6 +4,7 @@ mod utils;
 mod scoreboard;
 
 use glm::*;
+use crate::event::*;
 use crate::utils::*;
 use crate::collision::*;
 use crate::dom_utils::*;
@@ -445,7 +446,7 @@ pub fn update(
 
     for event in input_events {
         match event {
-            InputEvent::KeyDown { time, code } => {
+            InputEvent::KeyDown { code } => {
                 match code {
                     KeyCode::ArrowLeft => { update_bat_input(game_state, None, vec2(-1.0, 0.0)) }
                     KeyCode::ArrowRight => { update_bat_input(game_state, None, vec2(1.0, 0.0)) }
@@ -455,7 +456,7 @@ pub fn update(
                 log!("{} key pressed at time {:.2}!", code.as_ref(), time);
                 log!("{}", size_of::<JsValue>());
             },
-            InputEvent::KeyUp { time: _, code } => {
+            InputEvent::KeyUp { code } => {
                 match code {
                     KeyCode::ArrowLeft => { update_bat_input(game_state, Some(vec2(-1.0, 0.0)), vec2(0.0, 0.0)) }
                     KeyCode::ArrowRight => { update_bat_input(game_state, Some(vec2(1.0, 0.0)), vec2(0.0, 0.0)) }
@@ -477,7 +478,7 @@ pub fn update(
 
                 log!("{} key released at time {:.2}!", code.as_ref(), time);
             },
-            InputEvent::MouseMove { time: _, x, y } => {
+            InputEvent::MouseMove { x, y } => {
                 // game_state.ball.position.x = *x as f32;
                 // game_state.ball.position.y = *y as f32;
 

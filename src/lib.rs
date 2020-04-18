@@ -1,4 +1,5 @@
 extern crate nalgebra_glm as glm;
+mod event;
 #[macro_use]
 mod utils;
 mod dom_utils;
@@ -13,6 +14,7 @@ use wasm_bindgen::JsCast;
 use std::rc::Rc;
 use std::include_str;
 use web_sys::*;
+use event::*;
 use utils::*;
 use game::*;
 use crate::dom_utils::*;
@@ -66,6 +68,7 @@ pub fn greet() {
     fn bind_event_handlers(
         document : &Document,
         canvas : &HtmlCanvasElement,
+        overlay : &HtmlElement,
         input_events : Rc<RefCell<Vec<InputEvent>>>,
         update_struct : Rc<Recursive>) {
 
@@ -76,25 +79,23 @@ pub fn greet() {
             return Ok(code);
         };
 
-        fn js_to_keydown_event(js_value : JsValue, performance : &Performance) -> Expected<InputEvent> {
+        fn js_to_keydown_event(js_value : JsValue) -> Expected<InputEvent> {
             let event = InputEvent::KeyDown { 
-                time: now_sec(performance), 
                 code: get_code(js_value)?
-            };
+            }; 
 
             return Ok(event);
         }
 
-        fn js_to_keyup_event(js_value : JsValue, performance : &Performance) -> Expected<InputEvent> {
+        fn js_to_keyup_event(js_value : JsValue) -> Expected<InputEvent> {
             let event = InputEvent::KeyUp {
-                time: now_sec(performance),
                 code: get_code(js_value)?
             };
 
             return Ok(event);
         }
 
-        fn js_to_mousemove_event(js_value : JsValue, performance : &Performance) -> Expected<InputEvent> {
+        fn js_to_mousemove_event(js_value : JsValue) -> Expected<InputEvent> {
             let offset_x = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetX"))?;
             let offset_x = offset_x.as_f64().ok_or(Error::Msg("Expected 'offsetX' field in MouseEvent!"))?;
 
@@ -102,7 +103,6 @@ pub fn greet() {
             let offset_y = offset_y.as_f64().ok_or(Error::Msg("Expected 'offsetY' field in MouseEvent!"))?;
 
             let event = InputEvent::MouseMove { 
-                time: now_sec(performance),
                 x: offset_x,
                 y: offset_y
             };
@@ -110,13 +110,9 @@ pub fn greet() {
             return Ok(event);
         }
     
-        let update_struct_clone = update_struct.clone();
         let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
-            let event = js_to_keydown_event(
-                js_value,
-                &update_struct_clone.performance).unwrap();
-
-                input_events.borrow_mut().push(event);
+            let event = js_to_keydown_event(js_value).unwrap();
+            input_events.borrow_mut().push(event);
         });
         
         let closure = Closure::wrap(on_keydown as Box<dyn FnMut(JsValue)>);
@@ -125,10 +121,7 @@ pub fn greet() {
 
         let update_struct_clone = update_struct.clone();
         let on_keyup : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
-            let event = js_to_keyup_event(
-                js_value,
-                &update_struct_clone.performance).unwrap();
-    
+            let event = js_to_keyup_event(js_value).unwrap();
             update_struct_clone.events.borrow_mut().push(event);
         });
         
@@ -138,16 +131,50 @@ pub fn greet() {
 
         let update_struct_clone = update_struct.clone();
         let on_mousemove : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
-            let event = js_to_mousemove_event(
-                js_value,
-                &update_struct_clone.performance).unwrap();
-    
+            let event = js_to_mousemove_event(js_value).unwrap();
             update_struct_clone.events.borrow_mut().push(event);
         });
         
         let closure = Closure::wrap(on_mousemove as Box<dyn FnMut(JsValue)>);
         canvas.set_onmousemove(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
+
+        let on_touchstart : Box<dyn FnMut(event::TouchEvent) -> ExpectedUnit> = Box::new(move |value : event::TouchEvent| -> ExpectedUnit {
+            for touch in value.touches {
+                log!("on_touchstart: {:?}", touch);
+            }
+
+            return Ok(());
+        });
+
+        let set_ontouchmove : Box<dyn FnMut(event::TouchEvent) -> ExpectedUnit> = Box::new(move |value : event::TouchEvent| -> ExpectedUnit {
+            for touch in value.touches {
+                log!("set_ontouchmove: {:?}", touch);
+            }
+
+            return Ok(());
+        });
+
+        let set_ontouchend : Box<dyn FnMut(event::TouchEvent) -> ExpectedUnit> = Box::new(move |value : event::TouchEvent| -> ExpectedUnit {
+            for touch in value.touches {
+                log!("set_ontouchend: {:?}", touch);
+            }
+
+            return Ok(());
+        });
+
+        let set_ontouchcancel : Box<dyn FnMut(event::TouchEvent) -> ExpectedUnit> = Box::new(move |value : event::TouchEvent| -> ExpectedUnit {
+            for touch in value.touches {
+                log!("set_ontouchcancel: {:?}", touch);
+            }
+
+            return Ok(());
+        });
+
+        <HtmlElement as InputEventTarget>::set_ontouchstart(overlay.as_ref(), on_touchstart);
+        <HtmlElement as InputEventTarget>::set_ontouchmove(overlay.as_ref(), set_ontouchmove);
+        <HtmlElement as InputEventTarget>::set_ontouchend(overlay.as_ref(), set_ontouchend);
+        <HtmlElement as InputEventTarget>::set_ontouchcancel(overlay.as_ref(), set_ontouchcancel);
     }
 
     fn setup_main_loop(
@@ -209,13 +236,14 @@ pub fn greet() {
             context: RefCell::new(Box::new(())),
             events: Rc::new(RefCell::new(Vec::new())),
             performance: performance,
-            overlay: overlay,
+            overlay: overlay.clone(),
             last_time: RefCell::new(0f64)
         });
     
         bind_event_handlers(
             &document,
             &canvas,
+            &overlay,
             update_struct.events.clone(),
             update_struct.clone());
     

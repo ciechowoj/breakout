@@ -55,6 +55,9 @@ features = [
   'Node',
   'Storage',
   'Window',
+  'TouchEvent',
+  'TouchList',
+  'Touch'
 ]
 
 [profile.release]
