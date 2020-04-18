@@ -284,7 +284,7 @@ impl GameState {
             time: GameTime { sim_time: 0f64, real_time: 0f64, elapsed: 0f32 },
             collision: None,
             score: 0,
-            lives: 1,
+            lives: 3,
             game_over_time : 0f64
         }
     }

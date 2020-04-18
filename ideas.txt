@@ -26,6 +26,7 @@
 - Shining bricks effect
 - More kinds of bricks
 - Procedurally generate the bricks (with the same seed value)
+- Touch input / mobile control
 
 - Publish on the internet
     - Add adds
