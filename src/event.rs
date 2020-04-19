@@ -7,9 +7,12 @@ use wasm_bindgen::prelude::*;
 use strum_macros::AsRefStr;
 use strum_macros::EnumString;
 
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom};
+use std::rc::{Rc, Weak};
 
-#[derive(AsRefStr, EnumString)]
+#[derive(Clone, Copy, Debug, AsRefStr, EnumString, PartialEq, Eq, Hash)]
 pub enum KeyCode {
     Again,
     AltLeft,
@@ -173,21 +176,15 @@ pub enum KeyCode {
     WakeUp
 }
 
-macro_rules! log {
-    ( $( $t:tt )* ) => {
-        web_sys::console::log_1(&format!( $( $t )* ).into());
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Touch {
-    identifier : f64,
-    screen_x : f32,
-    screen_y : f32,
-    client_x : f32,
-    client_y : f32,
-    page_x : f32,
-    page_y : f32
+    pub identifier : u32,
+    pub screen_x : f32,
+    pub screen_y : f32,
+    pub client_x : f32,
+    pub client_y : f32,
+    pub page_x : f32,
+    pub page_y : f32
 }
 
 impl TryFrom<JsValue> for Touch {
@@ -195,7 +192,7 @@ impl TryFrom<JsValue> for Touch {
 
     fn try_from(js_value: JsValue) -> Expected<Self> {
         Ok(Touch {
-            identifier: get_property_as_f64(&js_value, "identifier")?,
+            identifier: get_property_as_f64(&js_value, "identifier")? as u32,
             screen_x: get_property_as_f64(&js_value, "screenX")? as f32,
             screen_y: get_property_as_f64(&js_value, "screenY")? as f32,
             client_x: get_property_as_f64(&js_value, "clientX")? as f32,
@@ -213,17 +210,60 @@ pub enum InputEvent {
     
 }
 
+#[derive(Debug)]
+pub enum KeyboardEventType {
+    KeyDown,
+    KeyPress,
+    KeyUp
+}
 
-pub struct KeyDownEvent {
+#[derive(Debug)]
+pub struct KeyboardEvent {
+    pub r#type : KeyboardEventType,
+    pub code : KeyCode
+}
+
+#[derive(Debug)]
+pub enum MouseEventType {
 
 }
 
-pub struct KeyUpEvent {
-
+#[derive(Debug)]
+pub struct MouseEvent {
+    pub r#type : MouseEventType,
+    pub code : KeyCode
 }
 
+#[derive(Debug)]
+pub enum TouchEventType {
+    TouchCancel,
+    TouchEnd,
+    TouchMove,
+    TouchStart
+}
+
+#[derive(Debug)]
 pub struct TouchEvent {
+    pub r#type : TouchEventType,
     pub touches : Vec<Touch>
+}
+
+impl TryFrom<JsValue> for TouchEventType {
+    type Error = Error;
+
+    fn try_from(js_value: JsValue) -> Expected<Self> {
+        let error = "Failed to convert JsValue to TouchEventType!";
+        let r#type = js_value.as_string()
+            .ok_or(Error::Msg(error))?;
+
+        match r#type.as_str() {
+            "touchcancel" => Ok(TouchEventType::TouchCancel),
+            "touchend" => Ok(TouchEventType::TouchEnd),
+            "touchmove" => Ok(TouchEventType::TouchMove),
+            "touchstart" => Ok(TouchEventType::TouchStart),
+            _ => Err(Error::Msg(error))
+        }
+    }
 }
 
 impl TryFrom<JsValue> for TouchEvent {
@@ -249,7 +289,10 @@ impl TryFrom<JsValue> for TouchEvent {
             touches.push(Touch::try_from(js_result)?);
         }
 
-        Ok(TouchEvent { touches: touches })
+        Ok(TouchEvent { 
+            r#type: TouchEventType::try_from(get_property(&js_value, "type")?)?,
+            touches: touches 
+        })
     }
 }
 
@@ -369,3 +412,121 @@ impl InputEventTarget for HtmlElement {
     }
 }
 
+pub struct EventQueues {
+    pub keyboard_events : Vec<KeyboardEvent>,
+    pub mouse_events : Vec<MouseEvent>,
+    pub touch_events : Vec<TouchEvent>
+}
+
+impl EventQueues {
+    pub fn new() -> Rc<RefCell<EventQueues>> {
+        let event_queues = EventQueues {
+            keyboard_events: Vec::<KeyboardEvent>::new(),
+            mouse_events: Vec::<MouseEvent>::new(),
+            touch_events: Vec::<TouchEvent>::new()
+        };
+
+        return Rc::new(RefCell::new(event_queues))
+    }
+
+    pub fn bind_all_queues(event_queues : Weak<RefCell<EventQueues>>, source : &HtmlElement) {
+        let closure = Box::new(move |value : TouchEvent| -> ExpectedUnit {
+            match event_queues.upgrade() {
+                Some(event_queues) => event_queues.borrow_mut().touch_events.push(value),
+                None => ()
+            }
+
+            Ok(())
+        });
+
+        <HtmlElement as InputEventTarget>::set_ontouchstart(source.as_ref(), closure.clone());
+        <HtmlElement as InputEventTarget>::set_ontouchmove(source.as_ref(), closure.clone());
+        <HtmlElement as InputEventTarget>::set_ontouchend(source.as_ref(), closure.clone());
+        <HtmlElement as InputEventTarget>::set_ontouchcancel(source.as_ref(), closure.clone());
+    }
+
+    pub fn clear_all_queues(event_queues : &Rc<RefCell<EventQueues>>) {
+        let mut event_queues = event_queues.borrow_mut();
+        event_queues.keyboard_events.clear();
+        event_queues.mouse_events.clear();
+        event_queues.touch_events.clear();
+    }
+}
+
+pub struct TouchTracker {
+    pub touches : Vec<Touch>
+}
+
+impl TouchTracker {
+    pub fn new() -> TouchTracker {
+        TouchTracker { touches: Vec::new() }
+    }
+
+    pub fn update(&mut self, touch_events : &Vec<TouchEvent>) {
+        let mut id_map : HashMap<u32, usize> = HashMap::new();
+
+        for i in 0..self.touches.len() {
+            id_map.insert(self.touches[i].identifier, i);
+        }
+
+        for event in touch_events {
+            match event.r#type {
+                TouchEventType::TouchStart | TouchEventType::TouchMove  => {
+                    for touch in &event.touches {
+                        if let Some(index) = id_map.get(&touch.identifier) {
+                            self.touches[*index] = *touch;
+                        }
+                        else {
+                            id_map.insert(touch.identifier, self.touches.len());
+                            self.touches.push(*touch);
+                        }
+                    }
+                }
+
+                TouchEventType::TouchEnd | TouchEventType::TouchCancel => {
+                    let mut retain_set : HashSet<u32> = HashSet::new();
+
+                    for touch in &event.touches {
+                        retain_set.insert(touch.identifier);
+                    }
+
+                    let mut i = 0;
+                    while i < self.touches.len() {
+                        if !retain_set.contains(&self.touches[i].identifier) {
+                            id_map.remove(&self.touches[i].identifier);
+                            self.touches[i] = self.touches[self.touches.len() - 1];
+                            self.touches.pop();
+                        }
+                        else {
+                            i += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub struct KeyboardState {
+    state : HashSet<KeyCode>
+}
+
+impl KeyboardState {
+    pub fn new() -> KeyboardState {
+        KeyboardState { state: HashSet::new() }
+    }
+
+    pub fn update_legacy(&mut self, input_events : &Vec<InputEvent>) {
+        for event in input_events {
+            match event {
+                InputEvent::KeyDown { code } => { self.state.insert(*code); },
+                InputEvent::KeyUp { code } => { self.state.remove(code); },
+                _ => ()
+            }
+        }
+    }
+
+    pub fn is_down(&self, code : KeyCode) -> bool {
+       self.state.contains(&code)
+    }
+}

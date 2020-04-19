@@ -19,7 +19,7 @@ macro_rules! log {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     Msg(&'static str),
     Str(String),

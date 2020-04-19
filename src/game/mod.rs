@@ -11,7 +11,6 @@ use crate::dom_utils::*;
 use crate::game::bricks::*;
 use crate::game::utils::*;
 use crate::game::scoreboard::*;
-use std::mem::*;
 use std::cmp::{max};
 use std::include_str;
 use wasm_bindgen::prelude::*;
@@ -217,7 +216,6 @@ impl Updateable<Ball> for GameState {
             let reflected = reflect(ball.velocity, collision.normal);
             ball.position = ball.position + ball.velocity * elapsed * collision.t + reflected * elapsed * (1.0 - collision.t);
             ball.velocity = reflected;
-            self.collision = outer_collision.clone();
         }
         else {
             ball.position = new_position;
@@ -267,7 +265,8 @@ pub struct GameState {
     pub score : u64,
     pub lives : u32,
     pub game_over_time : f64,
-    pub collision : Option<Collision>
+    pub keyboard_state : KeyboardState,
+    pub touch_tracker : TouchTracker
 }
 
 impl GameState {
@@ -283,10 +282,11 @@ impl GameState {
             bricks: bricks,
             last_time: last_time,
             time: GameTime { sim_time: 0f64, real_time: 0f64, elapsed: 0f32 },
-            collision: None,
             score: 0,
             lives: 3,
-            game_over_time : 0f64
+            game_over_time: 0f64,
+            keyboard_state: KeyboardState::new(),
+            touch_tracker: TouchTracker::new()
         }
     }
 }
@@ -311,19 +311,6 @@ pub fn init(
     let bricks = Bricks::new(canvas_size);
 
     GameState::new(bat, ball, bricks, time)
-}
-
-pub fn update_bat_input(
-    game_state : &mut GameState,
-    expected_input: Option<Vec2>,
-    new_input : Vec2) {
-    let bat = &mut game_state.bat;
-
-    if expected_input.is_none() 
-    || bat.input.x == expected_input.unwrap().x 
-    && bat.input.y == expected_input.unwrap().y {
-        bat.input = new_input;
-    }
 }
 
 pub fn init_overlay(
@@ -441,6 +428,7 @@ pub fn update_overlay(
 pub fn update(
     game_state : &mut GameState,
     input_events : &Vec<InputEvent>,
+    event_queues : &EventQueues,
     canvas_size : Vec2,
     time : f64) -> Expected<()> {
 
@@ -448,18 +436,13 @@ pub fn update(
         match event {
             InputEvent::KeyDown { code } => {
                 match code {
-                    KeyCode::ArrowLeft => { update_bat_input(game_state, None, vec2(-1.0, 0.0)) }
-                    KeyCode::ArrowRight => { update_bat_input(game_state, None, vec2(1.0, 0.0)) }
                     _ => {}
                 }
 
                 log!("{} key pressed at time {:.2}!", code.as_ref(), time);
-                log!("{}", size_of::<JsValue>());
             },
             InputEvent::KeyUp { code } => {
                 match code {
-                    KeyCode::ArrowLeft => { update_bat_input(game_state, Some(vec2(-1.0, 0.0)), vec2(0.0, 0.0)) }
-                    KeyCode::ArrowRight => { update_bat_input(game_state, Some(vec2(1.0, 0.0)), vec2(0.0, 0.0)) }
                     KeyCode::Space => { game_state.bricks.reset_last_row() }
                     KeyCode::Enter => {   
                         match game_state.stage {
@@ -478,13 +461,39 @@ pub fn update(
 
                 log!("{} key released at time {:.2}!", code.as_ref(), time);
             },
-            InputEvent::MouseMove { x, y } => {
-                // game_state.ball.position.x = *x as f32;
-                // game_state.ball.position.y = *y as f32;
+            InputEvent::MouseMove { x : _, y : _ } => { }
+        }
+    }
 
-                log!("Mouse moved to position {:.2} {:.2} at time {:.2}!", x, y, time);
+    game_state.keyboard_state.update_legacy(input_events);
+    game_state.touch_tracker.update(&event_queues.touch_events);
+
+    let left_arrow = game_state.keyboard_state.is_down(KeyCode::ArrowLeft);
+    let right_arrow = game_state.keyboard_state.is_down(KeyCode::ArrowRight);
+
+    game_state.bat.input = vec2(0f32, 0f32);
+
+    if left_arrow || right_arrow {
+        if left_arrow {
+            game_state.bat.input = vec2(-1f32, 0f32);
+        }
+        else {
+            game_state.bat.input = vec2(1f32, 0f32);
+        }
+    }
+    else {
+        for touch in &game_state.touch_tracker.touches {
+            if touch.client_x < 500f32 {
+                game_state.bat.input = vec2(-1f32, 0f32);
+            }
+            else {
+                game_state.bat.input = vec2(1f32, 0f32);
             }
         }
+    }
+
+    for touch in &game_state.touch_tracker.touches {
+        log!("{:?}", touch);
     }
 
     let epsilon = 0.01f64;
@@ -543,14 +552,6 @@ pub fn render(
         GameStage::Gameplay => game_state.bat.render(rendering_context)?,
         _ => ()
     };
-
-    /* if let Some(collision) = &game_state.collision {
-        draw_vector(rendering_context, collision.point, collision.point + collision.normal * 32f32, "green")?;
-        draw_circle(rendering_context, collision.point, 3.0, "green")?;
-        draw_vector(rendering_context, collision.point, collision.point + game_state.ball.velocity, "blue")?;
-        let reflected = reflect(-game_state.ball.velocity, collision.normal) * (1.0 - collision.t);
-        draw_vector(rendering_context, collision.point, collision.point + reflected, "yellow")?;
-    }*/
 
     return Ok(());
 }

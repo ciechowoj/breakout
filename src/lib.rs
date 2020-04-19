@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use std::rc::Rc;
+use std::rc::{Rc};
 use std::include_str;
 use web_sys::*;
 use event::*;
@@ -60,6 +60,7 @@ pub fn greet() {
         value: Rc<dyn Fn(Rc<Recursive>)>,
         context: RefCell<Box<dyn Any>>,
         events: Rc<RefCell<Vec<InputEvent>>>,
+        event_queues: Rc<RefCell<EventQueues>>,
         performance: Performance,
         overlay: HtmlElement,
         last_time: RefCell<f64>
@@ -202,10 +203,12 @@ pub fn greet() {
                     crate::update(
                         &mut update.context.borrow_mut(),
                         &update.events.borrow(),
+                        &update.event_queues.borrow(),
                         &rendering_context,
                         &update.overlay,
                         time).unwrap();
 
+                    EventQueues::clear_all_queues(&update.event_queues);
                     update.events.borrow_mut().clear();
 
                     let elapsed = now_sec(&update.performance) - time;
@@ -235,6 +238,7 @@ pub fn greet() {
             value: update_clone.clone(),
             context: RefCell::new(Box::new(())),
             events: Rc::new(RefCell::new(Vec::new())),
+            event_queues: EventQueues::new(),
             performance: performance,
             overlay: overlay.clone(),
             last_time: RefCell::new(0f64)
@@ -247,6 +251,8 @@ pub fn greet() {
             update_struct.events.clone(),
             update_struct.clone());
     
+        EventQueues::bind_all_queues(Rc::downgrade(&update_struct.event_queues), &overlay);
+
         update_clone(update_struct);
 
         return Ok(());
@@ -295,6 +301,7 @@ pub fn greet() {
 pub fn update(
     context : &mut Box<dyn Any>,
     input_events : &Vec<InputEvent>,
+    event_queues : &EventQueues,
     rendering_context : &CanvasRenderingContext2d,
     overlay : &HtmlElement,
     time : f64) -> Expected<()> {
@@ -327,7 +334,7 @@ pub fn update(
     let game_state = context.downcast_mut::<GameState>()
         .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
 
-    game::update(game_state, input_events, canvas_size, time)?;
+    game::update(game_state, input_events, event_queues, canvas_size, time)?;
     game::update_overlay(game_state, overlay, time)?;
     game::render(game_state, rendering_context, canvas_size, time)?;
 
