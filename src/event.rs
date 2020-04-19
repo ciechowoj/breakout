@@ -495,6 +495,7 @@ impl TouchTracker {
                         if !retain_set.contains(&self.touches[i].identifier) {
                             id_map.remove(&self.touches[i].identifier);
                             self.touches[i] = self.touches[self.touches.len() - 1];
+                            id_map.insert(self.touches[i].identifier, i);
                             self.touches.pop();
                         }
                         else {
