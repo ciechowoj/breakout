@@ -3,6 +3,9 @@ name = "breakout"
 version = "0.1.0"
 authors = ["Wojciech Szęszoł <keepitsimplesirius@gmail.com>"]
 edition = "2018"
+description = "A simple game in rust and webassembly."
+repository = "https://github.com/ciechowoj/breakout"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
