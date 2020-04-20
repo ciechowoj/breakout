@@ -1,1 +1,3 @@
 AddType application/wasm .wasm
+AddHandler cgi-script .cgi
+Options +ExecCGI

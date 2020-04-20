@@ -1,4 +1,7 @@
 /target
+**/target/debug/*
+**/target/release/*
+**/target/.rustc_info.json
 **/*.rs.bk
 Cargo.lock
 bin/
