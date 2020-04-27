@@ -3,11 +3,22 @@ use std::error;
 use std::io;
 use std::io::Read;
 use std::str::FromStr;
-use tokio_postgres::{NoTls, Error};
+use tokio_postgres::{Client, NoTls, Error};
 use serde::{Serialize, Deserialize};
+use chrono::{DateTime, TimeZone, NaiveDateTime, Utc};
+use uuid::Uuid;
 
 // GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
-// POST score { "player": "Maxymilian TheBest", "score": 1000 }
+// POST score/add { "player": "Maxymilian TheBest", "score": 1000 }
+
+// POST session/new -> "<uuid>"
+// POST session/heartbeat -> 200 OK
+
+#[derive(Serialize, Deserialize)]
+pub struct PlayerScore {
+    pub player : String,
+    pub score : u64
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
@@ -43,25 +54,47 @@ fn get_request() -> Result<Request, Box<dyn error::Error>> {
     })
 }
 
+async fn add_score(client : &Client, player : String, score : i64) -> Result<(), Box<dyn error::Error>> {
+    client.execute(
+        "CREATE TABLE IF NOT EXISTS high_scores (
+            id uuid PRIMARY KEY,
+            player varchar(128) NOT NULL,
+            score bigint,
+            created_time timestamptz);", &[]).await?;
+
+    client.execute(
+        "INSERT INTO high_scores(id, player, score, created_time)
+        VALUES ($1, $2, $3, $4);", &[&Uuid::new_v4(), &player, &score, &Utc::now()]).await?;
+
+    Ok(())
+}
+
+async fn get_scores(client : &Client) -> Result<Vec<PlayerScore>, Box<dyn error::Error>> {
+    
+
+}
+
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn error::Error>> {
-    // let (client, connection) =
-    //     tokio_postgres::connect("host=localhost user=wojciech dbname=wojciech password=password", NoTls).await?;
+    let (client, connection) =
+        tokio_postgres::connect("host=localhost user=wojciech dbname=wojciech password=password", NoTls).await?;
 
-    // tokio::spawn(async move {
-    //     if let Err(e) = connection.await {
-    //         eprintln!("connection error: {}", e);
-    //     }
-    // });
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
 
-    // // Now we can execute a simple statement that just returns its parameter.
-    // let rows = client
-    //     .query("SELECT $1::TEXT", &[&"hello world"])
-    //     .await?;
+    let rows = client
+        .query("SELECT $1::TEXT", &[&"hello world"])
+        .await?;
 
-    // // And then check that we got back the same string we sent over.
-    // let value: &str = rows[0].get(0);
-    // assert_eq!(value, "hello world");
+    let value: &str = rows[0].get(0);
+    assert_eq!(value, "hello world");
+
+    add_score(&client, "Maxymilain Debeściak".to_owned(), 1024)
+        .await?;
 
     let serialized = serde_json::to_string(&get_request()?)?;
 

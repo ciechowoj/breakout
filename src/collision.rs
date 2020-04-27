@@ -9,7 +9,7 @@ pub struct Collision {
     pub t : f32
 }
 
-const COLLISION_EPSILON : f32 = 0.000001f32;
+const COLLISION_EPSILON : f32 = 0.000001f64;
 
 fn search_exact_collision_point<F>(
     collision_point : (Vec2, Vec2),
