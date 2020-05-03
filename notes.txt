@@ -1,0 +1,6 @@
+Disable pager in psql:
+\pset pager off
+
+Run cargo with stacktrace and io:
+RUST_BACKTRACE=1 cargo test -- --nocapture
+

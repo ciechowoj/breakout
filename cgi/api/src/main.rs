@@ -3,6 +3,7 @@ use std::error;
 use std::io;
 use std::io::Read;
 use std::str::FromStr;
+use std::fs;
 use tokio_postgres::{Client, NoTls, Error};
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, TimeZone, NaiveDateTime, Utc};
@@ -17,13 +18,14 @@ use uuid::Uuid;
 #[derive(Serialize, Deserialize)]
 pub struct PlayerScore {
     pub player : String,
-    pub score : u64
+    pub score : i64
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
     method : String,
     uri : String,
+    path : String,
     query : String,
     content : String
 }
@@ -46,15 +48,22 @@ fn get_request() -> Result<Request, Box<dyn error::Error>> {
         io::stdin().read_to_string(&mut content)?;
     }
 
+    let uri = env::var(REQUEST_URI)?;
+    let uri_clone = uri.clone();
+
+    let mut split_itr = uri_clone.splitn(2, '?');
+    let path = split_itr.next().unwrap();
+
     Ok(Request {
         method: env::var(REQUEST_METHOD)?,
-        uri: env::var(REQUEST_URI)?,
+        uri: uri,
+        path: path.to_owned(),
         query: env::var(QUERY_STRING)?,
         content: content
     })
 }
 
-async fn add_score(client : &Client, player : String, score : i64) -> Result<(), Box<dyn error::Error>> {
+async fn add_score(client : &Client, player : String, score : i64) -> Result<String, Box<dyn error::Error>> {
     client.execute(
         "CREATE TABLE IF NOT EXISTS high_scores (
             id uuid PRIMARY KEY,
@@ -66,41 +75,57 @@ async fn add_score(client : &Client, player : String, score : i64) -> Result<(),
         "INSERT INTO high_scores(id, player, score, created_time)
         VALUES ($1, $2, $3, $4);", &[&Uuid::new_v4(), &player, &score, &Utc::now()]).await?;
 
-    Ok(())
+    return Ok("{}".to_owned());
 }
 
-async fn get_scores(client : &Client) -> Result<Vec<PlayerScore>, Box<dyn error::Error>> {
-    
-
+async fn add_score_http(client : &Client, request : &Request) -> Result<String, Box<dyn error::Error>> {
+    let score : PlayerScore = serde_json::from_str(request.content.as_str())?;
+    return add_score(client, score.player, score.score).await;
 }
 
+async fn get_scores_http(client : &Client) -> Result<String, Box<dyn error::Error>> {
+    let rows = client
+        .query("SELECT player, score FROM high_scores;", &[])
+        .await?;
+
+    let scores : Vec<PlayerScore> = rows.iter()
+        .map(|row| PlayerScore { player: row.get("player"), score: row.get("score") }).collect();
+
+    return Ok(serde_json::to_string(&scores)?);
+}
+
+fn load_connection_string() -> Result<String, Box<dyn error::Error>> {
+    let connection_string : String = fs::read_to_string("definitely_not_a_connection_string.json")?;
+    let connection_string : String = serde_json::from_str(&connection_string)?;
+    return Ok(connection_string);
+}
+
+fn print_output(output : &str) {
+    println!("Content-Type: application/json\n");
+    println!("{}", output);
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn error::Error>> {
+    let connection_string = load_connection_string()?;
+
     let (client, connection) =
-        tokio_postgres::connect("host=localhost user=wojciech dbname=wojciech password=password", NoTls).await?;
+        tokio_postgres::connect(connection_string.as_ref(), NoTls).await?;
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
             eprintln!("connection error: {}", e);
         }
     });
+    
+    let request = get_request()?;
 
-    let rows = client
-        .query("SELECT $1::TEXT", &[&"hello world"])
-        .await?;
-
-    let value: &str = rows[0].get(0);
-    assert_eq!(value, "hello world");
-
-    add_score(&client, "Maxymilain Debeściak".to_owned(), 1024)
-        .await?;
-
-    let serialized = serde_json::to_string(&get_request()?)?;
-
-    println!("Content-type: application/json\n");
-    println!("{}", serialized);
-
+    match (request.method.as_str(), request.path.as_str()) {
+        ("GET", "/score/list") => print_output(get_scores_http(&client).await?.as_str()),
+        ("POST", "/score/add") => print_output(add_score_http(&client, &request).await?.as_str()),
+        _ => print_output("{}")
+    };
+    
     Ok(())
 }
 
