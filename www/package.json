@@ -9,7 +9,7 @@
   "scripts": {
     "build": "webpack --config webpack.prod.js",
     "start": "webpack-dev-server --open --config webpack.dev.js",
-    "deploy": "rsync www/dist/* rusty-games-hosting:public_html"
+    "deploy": "rsync dist/* rusty-games-hosting:public_html"
   },
   "repository": {
     "type": "git",

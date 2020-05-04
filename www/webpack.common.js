@@ -10,4 +10,7 @@ module.exports = {
   plugins: [
     new CopyWebpackPlugin(['index.html'])
   ],
+  performance: {
+    hints: false
+  }        
 };

@@ -1,6 +1,4 @@
-use anyhow::anyhow;
-use anyhow::bail;
-use anyhow::Result;
+use anyhow::*;
 use std::process::{Command, Stdio};
 use std::path::PathBuf;
 use std::env;

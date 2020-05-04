@@ -3,10 +3,9 @@ use std::error;
 use std::io;
 use std::io::Read;
 use std::str::FromStr;
-use std::fs;
-use tokio_postgres::{Client, NoTls, Error};
+use tokio_postgres::{Client, NoTls};
 use serde::{Serialize, Deserialize};
-use chrono::{DateTime, TimeZone, NaiveDateTime, Utc};
+use chrono::{Utc};
 use uuid::Uuid;
 
 // GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
@@ -137,7 +136,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
         ("POST", "/score/add") => print_output(add_score_http(&client, &request).await?.as_str()),
         _ => print_output("{}")
     };
-    
+
     Ok(())
 }
 
