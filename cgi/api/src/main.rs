@@ -95,9 +95,21 @@ async fn get_scores_http(client : &Client) -> Result<String, Box<dyn error::Erro
 }
 
 fn load_connection_string() -> Result<String, Box<dyn error::Error>> {
-    let connection_string : String = fs::read_to_string("definitely_not_a_connection_string.json")?;
-    let connection_string : String = serde_json::from_str(&connection_string)?;
-    return Ok(connection_string);
+    fn get_http_host() -> Result<String, Box<dyn error::Error>> {
+        const HTTP_HOST : &'static str = "HTTP_HOST";
+
+        let host : String = match env::var(HTTP_HOST) {
+            Ok(value) => Ok(value),
+            Err(env::VarError::NotPresent) => Ok("".to_owned()),
+            Err(error @ env::VarError::NotUnicode(_)) => Err(error)
+        }?;
+
+        return Ok(host);
+    }
+
+    let result = include!("../connection-string.fn");
+
+    return Ok(result.to_owned());
 }
 
 fn print_output(output : &str) {

@@ -10,3 +10,4 @@ pkg/
 wasm-pack.log
 www/node_modules
 www/dist
+**/connection-string.fn
