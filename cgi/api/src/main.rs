@@ -132,8 +132,8 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     let request = get_request()?;
 
     match (request.method.as_str(), request.path.as_str()) {
-        ("GET", "/score/list") => print_output(get_scores_http(&client).await?.as_str()),
-        ("POST", "/score/add") => print_output(add_score_http(&client, &request).await?.as_str()),
+        ("GET", "/api/score/list") => print_output(get_scores_http(&client).await?.as_str()),
+        ("POST", "/api/score/add") => print_output(add_score_http(&client, &request).await?.as_str()),
         _ => print_output("{}")
     };
 

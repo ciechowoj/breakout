@@ -145,12 +145,12 @@ fn assert_json_eq(a : &str, b : &str) {
 #[tokio::test]
 async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-        issue_api_request("POST", "/score/add", r#"{ "player": "Maxymilian TheBest", "score": 1000 }"#)?;
-        issue_api_request("POST", "/score/add", r#"{ "player": "Second Player", "score": 4 }"#)?;
-        issue_api_request("POST", "/score/add", r#"{ "player": "Third Player", "score": 3 }"#)?;
-        issue_api_request("POST", "/score/add", r#"{ "player": "Fourth Player", "score": 2 }"#)?;
+        issue_api_request("POST", "/api/score/add", r#"{ "player": "Maxymilian TheBest", "score": 1000 }"#)?;
+        issue_api_request("POST", "/api/score/add", r#"{ "player": "Second Player", "score": 4 }"#)?;
+        issue_api_request("POST", "/api/score/add", r#"{ "player": "Third Player", "score": 3 }"#)?;
+        issue_api_request("POST", "/api/score/add", r#"{ "player": "Fourth Player", "score": 2 }"#)?;
         
-        let actual = issue_api_request("GET", "/score/list", "")?;
+        let actual = issue_api_request("GET", "/api/score/list", "")?;
 
         let expected = r#"[
             { "player": "Maxymilian TheBest", "score": 1000 },
