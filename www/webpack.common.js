@@ -8,7 +8,7 @@ module.exports = {
     filename: "bootstrap.js",
   },
   plugins: [
-    new CopyWebpackPlugin(['index.html'])
+    new CopyWebpackPlugin(['index.html', '.htaccess'])
   ],
   performance: {
     hints: false

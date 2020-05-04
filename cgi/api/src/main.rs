@@ -1,8 +1,10 @@
+use anyhow::{Error, Result, bail};
 use std::env;
-use std::error;
 use std::io;
 use std::io::Read;
+use std::io::prelude::*;
 use std::str::FromStr;
+use std::fs::OpenOptions;
 use tokio_postgres::{Client, NoTls};
 use serde::{Serialize, Deserialize};
 use chrono::{Utc};
@@ -29,7 +31,7 @@ pub struct Request {
     content : String
 }
 
-fn get_request() -> Result<Request, Box<dyn error::Error>> {
+fn get_request() -> Result<Request, anyhow::Error> {
     const CONTENT_LENGTH : &'static str = "CONTENT_LENGTH";
     const REQUEST_METHOD : &'static str = "REQUEST_METHOD";
     const REQUEST_URI : &'static str = "REQUEST_URI";
@@ -62,7 +64,7 @@ fn get_request() -> Result<Request, Box<dyn error::Error>> {
     })
 }
 
-async fn add_score(client : &Client, player : String, score : i64) -> Result<String, Box<dyn error::Error>> {
+async fn add_score(client : &Client, player : String, score : i64) -> Result<String, anyhow::Error> {
     client.execute(
         "CREATE TABLE IF NOT EXISTS high_scores (
             id uuid PRIMARY KEY,
@@ -77,12 +79,12 @@ async fn add_score(client : &Client, player : String, score : i64) -> Result<Str
     return Ok("{}".to_owned());
 }
 
-async fn add_score_http(client : &Client, request : &Request) -> Result<String, Box<dyn error::Error>> {
+async fn add_score_http(client : &Client, request : &Request) -> Result<String, anyhow::Error> {
     let score : PlayerScore = serde_json::from_str(request.content.as_str())?;
     return add_score(client, score.player, score.score).await;
 }
 
-async fn get_scores_http(client : &Client) -> Result<String, Box<dyn error::Error>> {
+async fn get_scores_http(client : &Client) -> Result<String, anyhow::Error> {
     let rows = client
         .query("SELECT player, score FROM high_scores;", &[])
         .await?;
@@ -93,8 +95,8 @@ async fn get_scores_http(client : &Client) -> Result<String, Box<dyn error::Erro
     return Ok(serde_json::to_string(&scores)?);
 }
 
-fn load_connection_string() -> Result<String, Box<dyn error::Error>> {
-    fn get_http_host() -> Result<String, Box<dyn error::Error>> {
+fn load_connection_string() -> Result<String, anyhow::Error> {
+    fn get_http_host() -> Result<String, anyhow::Error> {
         const HTTP_HOST : &'static str = "HTTP_HOST";
 
         let host : String = match env::var(HTTP_HOST) {
@@ -116,8 +118,17 @@ fn print_output(output : &str) {
     println!("{}", output);
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn error::Error>> {
+fn open_log_file() -> Result<std::fs::File, anyhow::Error> {
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .write(true)
+        .open("error.log")?;
+
+    return Ok(file);
+}
+
+async fn inner_main() -> Result<(), anyhow::Error> {
     let connection_string = load_connection_string()?;
 
     let (client, connection) =
@@ -140,5 +151,16 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     Ok(())
 }
 
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let result = inner_main().await;
 
-
+    return match result {
+        Err(error) => {
+            let mut file = open_log_file().unwrap();
+            writeln!(file, "{}", error.to_string()).unwrap();
+            Err(error)
+        },
+        Ok(()) => Ok(())
+    };
+}

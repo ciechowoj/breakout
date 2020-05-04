@@ -2,10 +2,9 @@ use anyhow::*;
 use std::process::{Command, Stdio};
 use std::path::PathBuf;
 use std::env;
-use std::error;
 use std::str;
 use std::io::{self, Write};
-use tokio_postgres::{Client, NoTls, Error};
+use tokio_postgres::{Client, NoTls};
 
 #[cfg(debug_assertions)]
 fn debug_or_release() -> &'static str {
@@ -15,13 +14,6 @@ fn debug_or_release() -> &'static str {
 #[cfg(not(debug_assertions))]
 fn debug_or_release() -> &'static str {
     return "release";
-}
-
-fn load_connection_string() -> Result<String, Box<dyn error::Error>> {
-    use std::fs;
-    let connection_string : String = fs::read_to_string("definitely_not_a_connection_string.json")?;
-    let connection_string : String = serde_json::from_str(&connection_string)?;
-    return Ok(connection_string);
 }
 
 fn issue_api_request(
