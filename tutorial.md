@@ -1,6 +1,8 @@
 
-
 # Intro / wasm-pack + npm setup / first triangle
+
+    ## Assumptions
+    - Everything written in Rust and web-assembly (as little JS as possible)
 
 # Game context and animated bouncing ball
 
@@ -27,4 +29,3 @@
 # Deploy with Apache server
 
 # Persist high scores in the database
-
