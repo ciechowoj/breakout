@@ -19,6 +19,7 @@
     - Temporal slow down/speed up
     - Future prediction
     - Blockage (effortless gameplay)
+- Fix collisions when bat pushes the ball
 - Motion blur
 - Bent bat
 - Pause ?
@@ -27,10 +28,11 @@
 - More kinds of bricks
 - Procedurally generate the bricks (with the same seed value)
 - Touch input / mobile control
+    - The scoreboard doesn't work on mobile
 
 - Publish on the internet
     - Add adds
-    - Buy domain
-    - Buy hosting
+    ✓ Buy domain
+    ✓ Buy hosting
 
 
