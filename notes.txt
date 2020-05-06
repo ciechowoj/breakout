@@ -1,6 +1,45 @@
-Disable pager in psql:
-\pset pager off
+# Disable pager in psql:
+    \pset pager off
 
-Run cargo with stacktrace and io:
-RUST_BACKTRACE=1 cargo test -- --nocapture
+# Run cargo with stacktrace and io:
+    RUST_BACKTRACE=1 cargo test -- --nocapture
+    To install apache to serve localhost:
 
+# Configure Apache2 for serving on localhost
+    ## Install Apache2
+    sudo apt update
+    sudo apt-get install apache2
+
+    ## Create new site
+    cd /etc/apache2/sites-available/
+    sudo cp 000-default.conf 001-rusty-games.conf
+    code 001-rusty-games.conf 
+
+    ## This is new content
+    ServerName rusty-games.localhost
+    ServerAdmin webmaster@localhost
+    DocumentRoot /home/wojciech/breakout/www/dist
+
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+    <Directory "/home/wojciech/breakout/www/dist">
+        AllowOverride All # Enable .htaccess
+        Require all granted # Grant access
+    </Directory>
+
+    ## ensite and reload apache
+    sudo a2ensite 001-rusty-games.conf 
+    systemctl reload apache2
+
+    ## add '127.0.0.1   rusty-games.localhost' to /etc/hosts
+    code /etc/hosts
+    systemctl reload apache2
+
+    ## enable mod rewrite and mod_cgi
+    sudo a2enmod rewrite
+    sudo a2enmod cgi
+    systemctl reload apache2
+
+    ## enable +x on api
+    chmod +x /home/wojciech/breakout/www/dist/api
