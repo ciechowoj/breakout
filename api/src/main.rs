@@ -11,14 +11,14 @@ use chrono::{Utc};
 use uuid::Uuid;
 use apilib::*;
 
-// GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
-// POST score/add { "player": "Maxymilian TheBest", "score": 1000 }
+// GET /api/score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
+// POST /api/score/add { "player": "Maxymilian TheBest", "score": 1000 }
 
-// POST score/new (score : i64) -> uuid top 9 + id
-// POST score/rename (id : uuid, player : String) -> ()
+// POST /api/score/new (score : i64) -> uuid top 9 + id
+// POST /api/score/rename (id : uuid, player : String) -> ()
 
-// POST session/new -> "<uuid>"
-// POST session/heartbeat -> 200 OK
+// POST /api/session/new -> "<uuid>"
+// POST /api/session/heartbeat -> 200 OK
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Request {

@@ -125,6 +125,20 @@ async fn with_database(
     return Ok(());
 }
 
+fn fill_with_test_data() -> anyhow::Result<()> {
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "First Player", "score": 100 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Second Player", "score": 90 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Third Player", "score": 80 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Fourth Player", "score": 70 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Fifth Player", "score": 60 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Sixth Player", "score": 50 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Seventh Player", "score": 40 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Eights Player", "score": 30 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Ninth Player", "score": 20 }"#)?;
+    issue_api_request("POST", "/api/score/add", r#"{ "player": "Tenth Player", "score": 10 }"#)?;
+    return Ok(());
+}
+
 fn assert_json_eq(a : &str, b : &str) {
     let a : String = a.chars().filter(|c| !c.is_whitespace()).collect();
     let b : String = b.chars().filter(|c| !c.is_whitespace()).collect();
@@ -161,3 +175,20 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// POST /api/score/new (score : i64) -> uuid top 9 + id
+// POST /api/score/rename (id : uuid, player : String) -> ()
+
+// #[tokio::test]
+// async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
+//     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
+//         fill_with_test_data()?;
+        
+//         let actual = issue_api_request("POST", "/api/score/new", r#"{ "score": 1000 }"#)?;
+
+//         return Ok(());
+//     };
+
+//     with_database("rusty_games", body).await?;
+
+//     Ok(())
+// }
