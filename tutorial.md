@@ -4,7 +4,9 @@
     ## Assumptions
     - Everything written in Rust and web-assembly (as little JS as possible)
     - Note about very good support for Rust in VS Code through RLS
-    
+    - Using local crates:
+        https://gillesleblanc.wordpress.com/2014/10/10/using-a-local-crate-with-cargo/
+        
 # Game context and animated bouncing ball
 
 # Input from mouse & keyboard

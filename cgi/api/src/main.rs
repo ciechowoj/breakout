@@ -9,6 +9,7 @@ use tokio_postgres::{Client, NoTls};
 use serde::{Serialize, Deserialize};
 use chrono::{Utc};
 use uuid::Uuid;
+use apilib::*;
 
 // GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST score/add { "player": "Maxymilian TheBest", "score": 1000 }
@@ -18,12 +19,6 @@ use uuid::Uuid;
 
 // POST session/new -> "<uuid>"
 // POST session/heartbeat -> 200 OK
-
-#[derive(Serialize, Deserialize)]
-pub struct PlayerScore {
-    pub player : String,
-    pub score : i64
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
