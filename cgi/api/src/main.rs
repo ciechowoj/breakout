@@ -13,6 +13,9 @@ use uuid::Uuid;
 // GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST score/add { "player": "Maxymilian TheBest", "score": 1000 }
 
+// POST score/new (score : i64) -> uuid top 9 + id
+// POST score/rename (id : uuid, player : String) -> ()
+
 // POST session/new -> "<uuid>"
 // POST session/heartbeat -> 200 OK
 
