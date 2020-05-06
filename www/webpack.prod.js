@@ -5,6 +5,6 @@ const common = require('./webpack.common.js');
 module.exports = merge(common, {
   mode: 'production',
   plugins: [
-    new CopyWebpackPlugin(['../cgi/api/target/release/api'])
+    new CopyWebpackPlugin(['../api/target/release/api'])
   ]
 });
