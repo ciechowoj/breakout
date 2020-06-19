@@ -19,6 +19,7 @@ fn debug_or_release() -> &'static str {
 }
 
 fn issue_api_request<T: serde::de::DeserializeOwned>(
+    database : &str,
     method : &str,
     uri : &str,
     content : &str) -> Result<Response<T>> {
@@ -45,6 +46,7 @@ fn issue_api_request<T: serde::de::DeserializeOwned>(
     };
 
     let mut process = Command::new(api_exe)
+        .env("DATABASE_NAME", database)
         .env("CONTENT_LENGTH", content.len().to_string())
         .env("REQUEST_METHOD", method)
         .env("REQUEST_URI", uri)
@@ -132,17 +134,17 @@ async fn with_database(
     return Ok(());
 }
 
-fn fill_with_test_data() -> anyhow::Result<()> {
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "First Player", "score": 100 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Second Player", "score": 90 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Third Player", "score": 80 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 70 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Fifth Player", "score": 60 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Sixth Player", "score": 50 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Seventh Player", "score": 40 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Eights Player", "score": 30 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Ninth Player", "score": 20 }"#)?;
-    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Tenth Player", "score": 10 }"#)?;
+fn fill_with_test_data(database : &str) -> anyhow::Result<()> {
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "First Player", "score": 100 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Second Player", "score": 90 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Third Player", "score": 80 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 70 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Fifth Player", "score": 60 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Sixth Player", "score": 50 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Seventh Player", "score": 40 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Eights Player", "score": 30 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Ninth Player", "score": 20 }"#)?;
+    issue_api_request::<()>(database, "POST", "/api/score/add", r#"{ "name": "Tenth Player", "score": 10 }"#)?;
     return Ok(());
 }
 
@@ -154,15 +156,15 @@ fn assert_json_eq(a : &str, b : &str) {
 
 // GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST score/add { "player": "Maxymilian TheBest", "score": 1000 }
-
+#[tokio::test]
 async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-        let _ : Response<()> = issue_api_request("POST", "/api/score/add", r#"{ "name": "Maxymilian TheBest", "score": 1000 }"#)?;
-        let _ : Response<()> = issue_api_request("POST", "/api/score/add", r#"{ "name": "Second Player", "score": 4 }"#)?;
-        let _ : Response<()> = issue_api_request("POST", "/api/score/add", r#"{ "name": "Third Player", "score": 3 }"#)?;
-        let _ : Response<()> = issue_api_request("POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 2 }"#)?;
+        let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Maxymilian TheBest", "score": 1000 }"#)?;
+        let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Second Player", "score": 4 }"#)?;
+        let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Third Player", "score": 3 }"#)?;
+        let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 2 }"#)?;
         
-        let actual : Response<Vec<PlayerScore>> = issue_api_request("GET", "/api/score/list", "")?;
+        let actual : Response<Vec<PlayerScore>> = issue_api_request("simple_test", "GET", "/api/score/list", "")?;
 
         let expected = r#"[
             { "index": 0, "name": "Maxymilian TheBest", "score": 1000 },
@@ -187,9 +189,10 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-        fill_with_test_data()?;
+        fill_with_test_data("test_new_rename_api")?;
         
         let actual : Response<NewScoreResponse> = issue_api_request(
+            "test_new_rename_api",
             "POST",
             "/api/score/new",
             r#"{ "score": 85, "limit": 4 }"#)?;
@@ -207,6 +210,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
         let id = actual.body().id;
 
         let actual : Response<()> = issue_api_request(
+            "test_new_rename_api",
             "POST",
             "/api/score/rename",
             format!(r#"{{ "id": {}, "name": "New Player" }}"#, id).as_str())?;
@@ -214,6 +218,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(StatusCode::OK, actual.status());
 
         let actual : Response<Vec<PlayerScore>> = issue_api_request(
+            "test_new_rename_api",
             "GET",
             "/api/score/list",
             r#"{ "limit": 4 }"#)?;
@@ -238,10 +243,10 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[tokio::test]
+
 async fn cumulative_test() -> Result<(), Box<dyn std::error::Error>> {
     println!("simple_test");
-    simple_test().await?;
+    // simple_test().await?;
     println!("test_new_rename_api");
     test_new_rename_api().await?;
     return Ok(());

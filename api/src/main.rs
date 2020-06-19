@@ -128,9 +128,28 @@ fn load_connection_string() -> Result<String, anyhow::Error> {
         return Ok(host);
     }
 
-    let result = include!("../connection-string.fn");
+    fn get_database_name() -> Result<Option<String>> {
+        const DATABASE_NAME : &'static str = "DATABASE_NAME";
 
-    return Ok(result.to_owned());
+        let database_name : Option<String> = match env::var(DATABASE_NAME) {
+            Ok(value) => Ok(Some(value)),
+            Err(env::VarError::NotPresent) => Ok(None),
+            Err(error @ env::VarError::NotUnicode(_)) => Err(error)
+        }?;
+
+        return Ok(database_name);
+    }
+
+    let result = include!("../connection-string.fn").to_owned();
+
+    let result = if let Some(database_name) = get_database_name()? {
+        result.replace("{}", database_name.as_str())
+    }
+    else {
+        result
+    };
+
+    return Ok(result);
 }
 
 fn print_output<T : serde::Serialize>(response : &Response<T>) -> anyhow::Result<()> {
