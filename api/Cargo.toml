@@ -13,6 +13,7 @@ uuid = { version = "0.8", features = ["serde", "v4"] }
 chrono = { version = "^0.4", features = ["serde"] }
 anyhow = "1.0"
 apilib = { path = "../apilib" }
+http = { version = "^0.2" }
 
 [profile.release]
 opt-level = 'z'

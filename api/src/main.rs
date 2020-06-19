@@ -1,4 +1,4 @@
-use anyhow::{Error, Result, bail};
+use anyhow::*;
 use std::env;
 use std::io;
 use std::io::Read;
@@ -6,10 +6,11 @@ use std::io::prelude::*;
 use std::str::FromStr;
 use std::fs::OpenOptions;
 use tokio_postgres::{Client, NoTls};
-use serde::{Serialize, Deserialize};
+use serde::{de};
 use chrono::{Utc};
 use uuid::Uuid;
 use apilib::*;
+use http::{Request, Response, StatusCode};
 
 // GET /api/score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST /api/score/add { "player": "Maxymilian TheBest", "score": 1000 }
@@ -20,20 +21,19 @@ use apilib::*;
 // POST /api/session/new -> "<uuid>"
 // POST /api/session/heartbeat -> 200 OK
 
-#[derive(Serialize, Deserialize, Debug)]
+/*#[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
     method : String,
     uri : String,
     path : String,
     query : String,
     content : String
-}
+}*/
 
-fn get_request() -> Result<Request, anyhow::Error> {
+fn get_request() -> anyhow::Result<Request<String>> {
     const CONTENT_LENGTH : &'static str = "CONTENT_LENGTH";
     const REQUEST_METHOD : &'static str = "REQUEST_METHOD";
     const REQUEST_URI : &'static str = "REQUEST_URI";
-    const QUERY_STRING : &'static str = "QUERY_STRING";
 
     let mut content = String::new();
 
@@ -47,50 +47,72 @@ fn get_request() -> Result<Request, anyhow::Error> {
         io::stdin().read_to_string(&mut content)?;
     }
 
-    let uri = env::var(REQUEST_URI)?;
-    let uri_clone = uri.clone();
-
-    let mut split_itr = uri_clone.splitn(2, '?');
-    let path = split_itr.next().unwrap();
-
-    Ok(Request {
-        method: env::var(REQUEST_METHOD)?,
-        uri: uri,
-        path: path.to_owned(),
-        query: env::var(QUERY_STRING)?,
-        content: content
-    })
+    let request = Request::builder()
+        .method(env::var(REQUEST_METHOD)?.as_str())
+        .uri(env::var(REQUEST_URI)?)
+        .body(content)?;
+        
+    return Ok(request);
 }
 
-async fn add_score(client : &Client, player : String, score : i64) -> Result<String, anyhow::Error> {
+async fn add_score(client : &Client, request : &Request<AddScoreRequest>) -> anyhow::Result<Response<()>> {
     client.execute(
         "CREATE TABLE IF NOT EXISTS high_scores (
             id uuid PRIMARY KEY,
-            player varchar(128) NOT NULL,
+            name varchar(128) NOT NULL,
             score bigint,
             created_time timestamptz);", &[]).await?;
 
+    let body = &request.body();
+
     client.execute(
-        "INSERT INTO high_scores(id, player, score, created_time)
-        VALUES ($1, $2, $3, $4);", &[&Uuid::new_v4(), &player, &score, &Utc::now()]).await?;
+        "INSERT INTO high_scores(id, name, score, created_time)
+        VALUES ($1, $2, $3, $4);", &[&Uuid::new_v4(), &body.name, &body.score, &Utc::now()]).await?;
 
-    return Ok("{}".to_owned());
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body(())?;
+
+    return Ok(response);
 }
 
-async fn add_score_http(client : &Client, request : &Request) -> Result<String, anyhow::Error> {
-    let score : PlayerScore = serde_json::from_str(request.content.as_str())?;
-    return add_score(client, score.player, score.score).await;
-}
-
-async fn get_scores_http(client : &Client) -> Result<String, anyhow::Error> {
+async fn get_scores_http(client : &Client) -> anyhow::Result<Response<Vec<PlayerScore>>> {
     let rows = client
-        .query("SELECT player, score FROM high_scores;", &[])
+        .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score FROM high_scores;", &[])
         .await?;
 
     let scores : Vec<PlayerScore> = rows.iter()
-        .map(|row| PlayerScore { player: row.get("player"), score: row.get("score") }).collect();
+        .map(|row| PlayerScore { index: row.get::<&str, i64>("row_number") - 1, name: row.get("name"), score: row.get("score") })
+        .collect();
 
-    return Ok(serde_json::to_string(&scores)?);
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body(scores)?;
+
+    return Ok(response);
+}
+
+async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> anyhow::Result<Response<NewScoreResponse>> {
+    client.execute(
+        "CREATE TABLE IF NOT EXISTS high_scores (
+            id uuid PRIMARY KEY,
+            name varchar(128) NOT NULL,
+            score bigint,
+            created_time timestamptz);", &[]).await?;
+
+    let body = &request.body();
+
+    let id = Uuid::new_v4();
+
+    client.execute(
+        "INSERT INTO high_scores(id, name, score, created_time)
+        VALUES ($1, $2, $3, $4);", &[&id, &"", &body.score, &Utc::now()]).await?;
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body(NewScoreResponse { id: id, scores: Vec::<PlayerScore>::new() })?;
+
+    return Ok(response);
 }
 
 fn load_connection_string() -> Result<String, anyhow::Error> {
@@ -111,9 +133,11 @@ fn load_connection_string() -> Result<String, anyhow::Error> {
     return Ok(result.to_owned());
 }
 
-fn print_output(output : &str) {
+fn print_output<T : serde::Serialize>(response : &Response<T>) -> anyhow::Result<()> {
     println!("Content-Type: application/json\n");
-    println!("{}", output);
+    println!("{}", serde_json::to_string(&response.body())?);
+
+    return Ok(());
 }
 
 fn open_log_file() -> Result<std::fs::File, anyhow::Error> {
@@ -124,6 +148,14 @@ fn open_log_file() -> Result<std::fs::File, anyhow::Error> {
         .open("error.log")?;
 
     return Ok(file);
+}
+
+fn deserialize<T>(request : Request<String>) -> anyhow::Result<Request<T>>
+    where for<'de> T: de::Deserialize<'de>
+{
+    let (parts, body) = request.into_parts();
+    let body = serde_json::from_str(&body)?;
+    Ok(Request::from_parts(parts, body))
 }
 
 async fn inner_main() -> Result<(), anyhow::Error> {
@@ -140,10 +172,12 @@ async fn inner_main() -> Result<(), anyhow::Error> {
     
     let request = get_request()?;
 
-    match (request.method.as_str(), request.path.as_str()) {
-        ("GET", "/api/score/list") => print_output(get_scores_http(&client).await?.as_str()),
-        ("POST", "/api/score/add") => print_output(add_score_http(&client, &request).await?.as_str()),
-        _ => print_output("{}")
+    match (request.method().as_str(), request.uri().path()) {
+        ("GET", "/api/score/list") => print_output(&get_scores_http(&client).await?)?,
+        ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await?)?,
+        ("POST", "/api/score/new") => print_output(&new_score(&client, &deserialize(request)?).await?)?,
+        // ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &request).await?)?,
+        _ => print_output(&Response::builder().status(StatusCode::NOT_FOUND).body(())?)?
     };
 
     Ok(())

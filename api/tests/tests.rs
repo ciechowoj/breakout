@@ -5,6 +5,8 @@ use std::env;
 use std::str;
 use std::io::{self, Write};
 use tokio_postgres::{Client, NoTls};
+use http::{Response, StatusCode};
+use apilib::*;
 
 #[cfg(debug_assertions)]
 fn debug_or_release() -> &'static str {
@@ -16,10 +18,10 @@ fn debug_or_release() -> &'static str {
     return "release";
 }
 
-fn issue_api_request(
+fn issue_api_request<T: serde::de::DeserializeOwned>(
     method : &str,
     uri : &str,
-    content : &str) -> Result<String> {
+    content : &str) -> Result<Response<T>> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
     let pkg_name = env::var("CARGO_PKG_NAME")?;
 
@@ -84,7 +86,12 @@ fn issue_api_request(
         bail!("Content-Type header missing or is not set to 'application/json'!");
     };
 
-    return Ok(content.to_owned());
+    let response : Response<T> = Response::builder()
+        .status(200)
+        .body(serde_json::from_str(content)?)
+        .unwrap();
+
+    return Ok(response);
 }
 
 async fn with_database(
@@ -126,16 +133,16 @@ async fn with_database(
 }
 
 fn fill_with_test_data() -> anyhow::Result<()> {
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "First Player", "score": 100 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Second Player", "score": 90 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Third Player", "score": 80 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Fourth Player", "score": 70 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Fifth Player", "score": 60 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Sixth Player", "score": 50 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Seventh Player", "score": 40 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Eights Player", "score": 30 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Ninth Player", "score": 20 }"#)?;
-    issue_api_request("POST", "/api/score/add", r#"{ "player": "Tenth Player", "score": 10 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "First Player", "score": 100 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Second Player", "score": 90 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Third Player", "score": 80 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 70 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Fifth Player", "score": 60 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Sixth Player", "score": 50 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Seventh Player", "score": 40 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Eights Player", "score": 30 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Ninth Player", "score": 20 }"#)?;
+    issue_api_request::<()>("POST", "/api/score/add", r#"{ "name": "Tenth Player", "score": 10 }"#)?;
     return Ok(());
 }
 
@@ -148,24 +155,24 @@ fn assert_json_eq(a : &str, b : &str) {
 // GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST score/add { "player": "Maxymilian TheBest", "score": 1000 }
 
-#[tokio::test]
 async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-        issue_api_request("POST", "/api/score/add", r#"{ "player": "Maxymilian TheBest", "score": 1000 }"#)?;
-        issue_api_request("POST", "/api/score/add", r#"{ "player": "Second Player", "score": 4 }"#)?;
-        issue_api_request("POST", "/api/score/add", r#"{ "player": "Third Player", "score": 3 }"#)?;
-        issue_api_request("POST", "/api/score/add", r#"{ "player": "Fourth Player", "score": 2 }"#)?;
+        let _ : Response<()> = issue_api_request("POST", "/api/score/add", r#"{ "name": "Maxymilian TheBest", "score": 1000 }"#)?;
+        let _ : Response<()> = issue_api_request("POST", "/api/score/add", r#"{ "name": "Second Player", "score": 4 }"#)?;
+        let _ : Response<()> = issue_api_request("POST", "/api/score/add", r#"{ "name": "Third Player", "score": 3 }"#)?;
+        let _ : Response<()> = issue_api_request("POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 2 }"#)?;
         
-        let actual = issue_api_request("GET", "/api/score/list", "")?;
+        let actual : Response<Vec<PlayerScore>> = issue_api_request("GET", "/api/score/list", "")?;
 
         let expected = r#"[
-            { "player": "Maxymilian TheBest", "score": 1000 },
-            { "player": "Second Player", "score": 4 },
-            { "player": "Third Player", "score": 3 },
-            { "player": "Fourth Player", "score": 2 }
+            { "index": 0, "name": "Maxymilian TheBest", "score": 1000 },
+            { "index": 1, "name": "Second Player", "score": 4 },
+            { "index": 2, "name": "Third Player", "score": 3 },
+            { "index": 3, "name": "Fourth Player", "score": 2 }
         ]"#;
 
-        assert_json_eq(expected, actual.as_str());
+        assert_eq!(StatusCode::OK, actual.status());
+        assert_json_eq(expected, serde_json::to_string(&actual.body())?.as_str());
 
         return Ok(());
     };
@@ -178,17 +185,64 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
 // POST /api/score/new (score : i64) -> uuid top 9 + id
 // POST /api/score/rename (id : uuid, player : String) -> ()
 
-// #[tokio::test]
-// async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
-//     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-//         fill_with_test_data()?;
+async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
+    let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
+        fill_with_test_data()?;
         
-//         let actual = issue_api_request("POST", "/api/score/new", r#"{ "score": 1000 }"#)?;
+        let actual : Response<NewScoreResponse> = issue_api_request(
+            "POST",
+            "/api/score/new",
+            r#"{ "score": 85, "limit": 4 }"#)?;
+        
+        let expected = r#"[
+            { "index": 0, "player": "First Player", "score": 100 },
+            { "index": 1, "player": "Second Player", "score": 90 },
+            { "index": 2, "player": "", "score": 85 },
+            { "index": 3, "player": "Third Player", "score": 80 }
+        ]"#;
 
-//         return Ok(());
-//     };
+        assert_eq!(StatusCode::OK, actual.status());
+        assert_json_eq(expected, serde_json::to_string(&actual.body().scores)?.as_str());
 
-//     with_database("rusty_games", body).await?;
+        let id = actual.body().id;
 
-//     Ok(())
-// }
+        let actual : Response<()> = issue_api_request(
+            "POST",
+            "/api/score/rename",
+            format!(r#"{{ "id": {}, "name": "New Player" }}"#, id).as_str())?;
+
+        assert_eq!(StatusCode::OK, actual.status());
+
+        let actual : Response<Vec<PlayerScore>> = issue_api_request(
+            "GET",
+            "/api/score/list",
+            r#"{ "limit": 4 }"#)?;
+
+        assert_eq!(StatusCode::OK, actual.status());
+
+        let expected = r#"[
+            { "index": 0, "player": "First Player", "score": 100 },
+            { "index": 1, "player": "Second Player", "score": 90 },
+            { "index": 2, "player": "", "score": 85 },
+            { "index": 3, "player": "Third Player", "score": 80 }
+        ]"#;
+
+        assert_eq!(StatusCode::OK, actual.status());
+        assert_json_eq(expected, serde_json::to_string(&actual.body())?.as_str());
+
+        return Ok(());
+    };
+
+    with_database("rusty_games", body).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn cumulative_test() -> Result<(), Box<dyn std::error::Error>> {
+    println!("simple_test");
+    simple_test().await?;
+    println!("test_new_rename_api");
+    test_new_rename_api().await?;
+    return Ok(());
+}
