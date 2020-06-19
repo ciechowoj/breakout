@@ -179,14 +179,14 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     };
 
-    with_database("rusty_games", body).await?;
+    with_database("simple_test", body).await?;
 
     Ok(())
 }
 
 // POST /api/score/new (score : i64) -> uuid top 9 + id
 // POST /api/score/rename (id : uuid, player : String) -> ()
-
+#[tokio::test]
 async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api")?;
@@ -238,16 +238,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     };
 
-    with_database("rusty_games", body).await?;
+    with_database("test_new_rename_api", body).await?;
 
     Ok(())
-}
-
-
-async fn cumulative_test() -> Result<(), Box<dyn std::error::Error>> {
-    println!("simple_test");
-    // simple_test().await?;
-    println!("test_new_rename_api");
-    test_new_rename_api().await?;
-    return Ok(());
 }
