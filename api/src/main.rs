@@ -108,9 +108,20 @@ async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> any
         "INSERT INTO high_scores(id, name, score, created_time)
         VALUES ($1, $2, $3, $4);", &[&id, &"", &body.score, &Utc::now()]).await?;
 
+    let rows = client
+        .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
+                FROM high_scores
+                ORDER BY score DESC
+                LIMIT $1;", &[&body.limit])
+        .await?;
+
+    let scores : Vec<PlayerScore> = rows.iter()
+        .map(|row| PlayerScore { index: row.get::<&str, i64>("row_number") - 1, name: row.get("name"), score: row.get("score") })
+        .collect();
+
     let response = Response::builder()
         .status(StatusCode::OK)
-        .body(NewScoreResponse { id: id, scores: Vec::<PlayerScore>::new() })?;
+        .body(NewScoreResponse { id: id, scores: scores })?;
 
     return Ok(response);
 }

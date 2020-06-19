@@ -198,10 +198,10 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
             r#"{ "score": 85, "limit": 4 }"#)?;
         
         let expected = r#"[
-            { "index": 0, "player": "First Player", "score": 100 },
-            { "index": 1, "player": "Second Player", "score": 90 },
-            { "index": 2, "player": "", "score": 85 },
-            { "index": 3, "player": "Third Player", "score": 80 }
+            { "index": 0, "name": "First Player", "score": 100 },
+            { "index": 1, "name": "Second Player", "score": 90 },
+            { "index": 2, "name": "", "score": 85 },
+            { "index": 3, "name": "Third Player", "score": 80 }
         ]"#;
 
         assert_eq!(StatusCode::OK, actual.status());
@@ -226,10 +226,10 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(StatusCode::OK, actual.status());
 
         let expected = r#"[
-            { "index": 0, "player": "First Player", "score": 100 },
-            { "index": 1, "player": "Second Player", "score": 90 },
-            { "index": 2, "player": "", "score": 85 },
-            { "index": 3, "player": "Third Player", "score": 80 }
+            { "index": 0, "name": "First Player", "score": 100 },
+            { "index": 1, "name": "Second Player", "score": 90 },
+            { "index": 2, "name": "", "score": 85 },
+            { "index": 3, "name": "Third Player", "score": 80 }
         ]"#;
 
         assert_eq!(StatusCode::OK, actual.status());
