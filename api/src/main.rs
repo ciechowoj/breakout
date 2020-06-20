@@ -10,7 +10,9 @@ use serde::{de};
 use chrono::{Utc};
 use uuid::Uuid;
 use apilib::*;
+use sha2::{Sha256, Digest};
 use http::{Request, Response, StatusCode};
+use hex;
 
 // GET /api/score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST /api/score/add { "player": "Maxymilian TheBest", "score": 1000 }
@@ -53,6 +55,20 @@ fn get_request() -> anyhow::Result<Request<String>> {
         .body(content)?;
         
     return Ok(request);
+}
+
+fn get_session_id_salt() -> anyhow::Result<[u8; 32]> {
+    const SESSION_ID_SALT : &'static str = "SESSION_ID_SALT";
+
+    let session_id_salt : String = match env::var(SESSION_ID_SALT) {
+        Ok(value) => Ok(value),
+        Err(error) => Err(error)
+    }?;
+
+    let mut bytes = [0u8; 32];
+    hex::decode_to_slice(session_id_salt.as_str(), &mut bytes)?;
+
+    return Ok(bytes);
 }
 
 async fn add_score(client : &Client, request : &Request<AddScoreRequest>) -> anyhow::Result<Response<()>> {
@@ -106,15 +122,75 @@ async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest
     return Ok(response);
 }
 
+async fn new_session_id() -> anyhow::Result<Response<String>> {
+    let session_id_salt = get_session_id_salt()?;
+    let nonce = rand128();
+
+    let sha256 = Sha256::new()
+        .chain(session_id_salt)
+        .chain(nonce)
+        .finalize();
+
+    let mut session_id = [0u8; 32];
+
+    for i in 0..16 {
+        session_id[i] = nonce[i];
+        session_id[i + 16] = sha256[i];
+    }
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body(hex::encode_upper(session_id))?;
+
+    return Ok(response);
+}
+
+fn validate_session_id(session_id : [u8; 32]) -> anyhow::Result<bool> {
+    let session_id_salt = get_session_id_salt()?;
+    
+    let mut nonce = [0u8; 16];
+    
+    for i in 0..16 {
+        nonce[i] = session_id[i];
+    }
+
+    let sha256 = Sha256::new()
+        .chain(session_id_salt)
+        .chain(nonce)
+        .finalize();
+
+    for i in 0..16 {
+        if sha256[i] != session_id[i + 16] {
+            return Ok(false);
+        }
+    }   
+
+    return Ok(true);
+}
+
+fn validate_session_id_str(session_id : &str) -> anyhow::Result<bool> {
+    let mut decoded = [0u8; 32];
+    hex::decode_to_slice(session_id, &mut decoded)?;
+    return validate_session_id(decoded);
+}
+
 async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> anyhow::Result<Response<NewScoreResponse>> {
+    let body = &request.body();
+
+    if !validate_session_id_str(body.session_id.as_str())? {
+        let response = Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(NewScoreResponse::Error("Invalid session id!".to_owned()))?;
+
+        return Ok(response);
+    }
+
     client.execute(
         "CREATE TABLE IF NOT EXISTS high_scores (
             id uuid PRIMARY KEY,
             name varchar(128) NOT NULL,
             score bigint,
             created_time timestamptz);", &[]).await?;
-
-    let body = &request.body();
 
     let id = Uuid::new_v4();
 
@@ -135,7 +211,7 @@ async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> any
 
     let response = Response::builder()
         .status(StatusCode::OK)
-        .body(NewScoreResponse { id: id, scores: scores })?;
+        .body(NewScoreResponse::Response { id: id, scores: scores })?;
 
     return Ok(response);
 }
@@ -194,7 +270,8 @@ fn load_connection_string() -> Result<String, anyhow::Error> {
 }
 
 fn print_output<T : serde::Serialize>(response : &Response<T>) -> anyhow::Result<()> {
-    println!("Content-Type: application/json\n");
+    println!("Content-Type: application/json");
+    println!("Status: {}\n", response.status().as_u16());
     println!("{}", serde_json::to_string(&response.body())?);
 
     return Ok(());
@@ -219,6 +296,15 @@ fn deserialize<T>(request : Request<String>) -> anyhow::Result<Request<T>>
 }
 
 async fn inner_main() -> Result<(), anyhow::Error> {
+    let request = get_request()?;
+
+    // Database connection not required.
+    match (request.method().as_str(), request.uri().path()) {
+        ("GET", "/api/session-id/new") => { print_output(&new_session_id().await?)?; return Ok(()); },
+        _ => ()
+    };
+
+    // Database connection required.
     let connection_string = load_connection_string()?;
 
     let (client, connection) =
@@ -230,8 +316,6 @@ async fn inner_main() -> Result<(), anyhow::Error> {
         }
     });
     
-    let request = get_request()?;
-
     match (request.method().as_str(), request.uri().path()) {
         ("GET", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await?)?,

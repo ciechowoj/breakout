@@ -47,6 +47,7 @@ fn issue_api_request<T: serde::de::DeserializeOwned>(
 
     let mut process = Command::new(api_exe)
         .env("DATABASE_NAME", database)
+        .env("SESSION_ID_SALT", "0000000000000000000000000000000000000000000000000000000000000000")
         .env("CONTENT_LENGTH", content.len().to_string())
         .env("REQUEST_METHOD", method)
         .env("REQUEST_URI", uri)
@@ -69,27 +70,33 @@ fn issue_api_request<T: serde::de::DeserializeOwned>(
     }
 
     let stdout = str::from_utf8(&output.stdout)?;
-    let mut split_itr = stdout.splitn(3, "\n");
 
-    let content = if let Some("Content-Type: application/json") = split_itr.next() {
-        if let Some("") = split_itr.next() {
-            if let Some(content) = split_itr.next() {
-                content
-            }
-            else {
-                ""
-            }
+    let mut split_itr = stdout.splitn(2, "\n\n");
+
+    let headers = split_itr.next().unwrap();
+    let content = if let Some(content) = split_itr.next() { content } else { "" };
+
+    let mut header_itr = headers.split("\n");
+
+    let mut content_type_present = false;
+    let mut status : Option<String> = None;
+
+    while let Some(header) = header_itr.next() {
+        if header.starts_with("Content-Type: application/json") {
+            content_type_present = true;
         }
-        else {
-            bail!("Empty line expected!");    
+        else if header.starts_with("Status") || header.starts_with("status:") {
+            status = header.splitn(2, ":").last().map(|x| x.trim().to_owned());
         }
     }
-    else {
-        bail!("Content-Type header missing or is not set to 'application/json'!");
-    };
 
+    if !content_type_present {
+        bail!("Content-Type header missing or is not set to 'application/json'!");
+    }
+
+    let status = match status { Some(status) => StatusCode::from_u16(status.parse()?)?, Node => StatusCode::OK };
     let response : Response<T> = Response::builder()
-        .status(200)
+        .status(status)
         .body(serde_json::from_str(content)?)
         .unwrap();
 
@@ -154,6 +161,17 @@ fn assert_json_eq(a : &str, b : &str) {
     assert_eq!(a.as_str(), b.as_str());
 }
 
+// ("GET", "/api/session-id/new")
+#[tokio::test]
+async fn new_session_id_test() -> Result<(), Box<dyn std::error::Error>> {
+    let actual : Response<String> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
+
+    assert_eq!(StatusCode::OK, actual.status());
+    assert_ne!("", actual.body());
+
+    Ok(())
+}
+
 // GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST score/add { "player": "Maxymilian TheBest", "score": 1000 }
 #[tokio::test]
@@ -191,11 +209,24 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api")?;
         
+        let session_id : Response<String> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
+
+        assert_eq!(StatusCode::OK, session_id.status());
+        
+        let request = NewScoreRequest {
+            score: 85i64,
+            session_id: session_id.body().clone(),
+            proof_of_work: "".to_owned(),
+            limit: 4i64
+        };
+
+        let request_json = serde_json::to_string(&request)?;
+
         let actual : Response<NewScoreResponse> = issue_api_request(
             "test_new_rename_api",
             "POST",
             "/api/score/new",
-            r#"{ "score": 85, "limit": 4 }"#)?;
+            request_json.as_str())?;
         
         let expected = r#"[
             { "index": 0, "name": "First Player", "score": 100 },
@@ -204,11 +235,17 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
             { "index": 3, "name": "Third Player", "score": 80 }
         ]"#;
 
+        println!("ERROR: {:?}", actual.body());
         assert_eq!(StatusCode::OK, actual.status());
-        assert_json_eq(expected, serde_json::to_string(&actual.body().scores)?.as_str());
 
-        let id = actual.body().id;
-
+        let id = match actual.body() {
+            NewScoreResponse::Response { id, scores} => {
+                assert_json_eq(expected, serde_json::to_string(&scores)?.as_str());
+                Ok(id)
+            },
+            NewScoreResponse::Error(error) => Err(anyhow!("{}", error))
+        }?;
+        
         let actual : Response<()> = issue_api_request(
             "test_new_rename_api",
             "POST",
