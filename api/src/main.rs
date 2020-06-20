@@ -6,6 +6,7 @@ use std::io::prelude::*;
 use std::str::FromStr;
 use std::fs::OpenOptions;
 use tokio_postgres::{Client, NoTls};
+use tokio_postgres::error::SqlState;
 use serde::{de};
 use chrono::{Utc};
 use uuid::Uuid;
@@ -168,26 +169,13 @@ fn validate_session_id(session_id : [u8; 32]) -> anyhow::Result<bool> {
     return Ok(true);
 }
 
-fn validate_session_id_str(session_id : &str) -> anyhow::Result<bool> {
-    let mut decoded = [0u8; 32];
-    hex::decode_to_slice(session_id, &mut decoded)?;
-    return validate_session_id(decoded);
-}
-
-fn validate_proof_of_work_str(session_id : &str, proof_of_work : &str, degree : usize) -> anyhow::Result<bool> {
-    let mut decoded_session_id = [0u8; 32];
-    hex::decode_to_slice(session_id, &mut decoded_session_id)?;
-
-    let mut decoded_proof_of_work = [0u8; 32];
-    hex::decode_to_slice(proof_of_work, &mut decoded_proof_of_work)?;
-
-    return Ok(validate_proof_of_work(decoded_session_id, decoded_proof_of_work, degree));
-}
-
 async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> anyhow::Result<Response<NewScoreResponse>> {
     let body = &request.body();
 
-    if !validate_session_id_str(body.session_id.as_str())? {
+    let mut decoded_session_id = [0u8; 32];
+    hex::decode_to_slice(body.session_id.as_str(), &mut decoded_session_id)?;
+
+    if !validate_session_id(decoded_session_id)? {
         let response = Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(NewScoreResponse::Error("Invalid session id!".to_owned()))?;
@@ -195,7 +183,10 @@ async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> any
         return Ok(response);
     }
 
-    if !validate_proof_of_work_str(body.session_id.as_str(), body.proof_of_work.as_str(), 8)? {
+    let mut decoded_proof_of_work = [0u8; 32];
+    hex::decode_to_slice(body.proof_of_work.as_str(), &mut decoded_proof_of_work)?;
+
+    if !validate_proof_of_work(decoded_session_id, decoded_proof_of_work, 8) {
         let response = Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(NewScoreResponse::Error("Invalid proof of work!".to_owned()))?;
@@ -210,11 +201,23 @@ async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> any
             score bigint,
             created_time timestamptz);", &[]).await?;
 
-    let id = Uuid::new_v4();
+    let id = Uuid::from_slice(&decoded_session_id[16..])?;
 
-    client.execute(
+    let result = client.execute(
         "INSERT INTO high_scores(id, name, score, created_time)
-        VALUES ($1, $2, $3, $4);", &[&id, &"", &body.score, &Utc::now()]).await?;
+         VALUES ($1, $2, $3, $4);", &[&id, &"", &body.score, &Utc::now()]).await;
+
+    if let Err(error) = result {
+        if let Some(code) = error.code() {
+            if *code == SqlState::UNIQUE_VIOLATION {
+                let response = Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(NewScoreResponse::Error("Session id cannot be reused!".to_owned()))?;
+
+                return Ok(response);
+            }
+        }
+    }
 
     let rows = client
         .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
