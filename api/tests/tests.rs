@@ -94,7 +94,7 @@ fn issue_api_request<T: serde::de::DeserializeOwned>(
         bail!("Content-Type header missing or is not set to 'application/json'!");
     }
 
-    let status = match status { Some(status) => StatusCode::from_u16(status.parse()?)?, Node => StatusCode::OK };
+    let status = match status { Some(status) => StatusCode::from_u16(status.parse()?)?, None => StatusCode::OK };
     let response : Response<T> = Response::builder()
         .status(status)
         .body(serde_json::from_str(content)?)
@@ -235,7 +235,6 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
             { "index": 3, "name": "Third Player", "score": 80 }
         ]"#;
 
-        println!("ERROR: {:?}", actual.body());
         assert_eq!(StatusCode::OK, actual.status());
 
         let id = match actual.body() {
@@ -276,6 +275,45 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     with_database("test_new_rename_api", body).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_new_rename_api_invalid_session_id() -> Result<(), Box<dyn std::error::Error>> {
+    let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
+        fill_with_test_data("test_new_rename_api_invalid_session_id")?;
+        
+        let session_id : Response<String> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
+
+        assert_eq!(StatusCode::OK, session_id.status());
+        
+        let session_id_amended = session_id.body()
+            .char_indices()
+            .map(|(i, c)| if i == 0 { if c == '0' { '1' } else { '0' } } else { c })
+            .collect::<String>();
+
+        let request = NewScoreRequest {
+            score: 85i64,
+            session_id: session_id_amended,
+            proof_of_work: "".to_owned(),
+            limit: 4i64
+        };
+
+        let request_json = serde_json::to_string(&request)?;
+
+        let actual : Response<NewScoreResponse> = issue_api_request(
+            "test_new_rename_api_invalid_session_id",
+            "POST",
+            "/api/score/new",
+            request_json.as_str())?;
+        
+        assert_eq!(StatusCode::BAD_REQUEST, actual.status());
+
+        return Ok(());
+    };
+
+    with_database("test_new_rename_api_invalid_session_id", body).await?;
 
     Ok(())
 }
