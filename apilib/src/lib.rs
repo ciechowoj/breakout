@@ -15,6 +15,16 @@ pub struct AddScoreRequest {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct ListScoresRequest {
+    pub limit : Option<i64>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ListScoresResponse {
+    pub scores : Vec<PlayerScore>
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct NewScoreRequest {
     pub score : i64,
     pub limit : i64

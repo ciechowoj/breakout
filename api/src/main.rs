@@ -76,10 +76,24 @@ async fn add_score(client : &Client, request : &Request<AddScoreRequest>) -> any
     return Ok(response);
 }
 
-async fn get_scores_http(client : &Client) -> anyhow::Result<Response<Vec<PlayerScore>>> {
-    let rows = client
-        .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score FROM high_scores;", &[])
-        .await?;
+async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest>) -> anyhow::Result<Response<Vec<PlayerScore>>> {
+    let body = request.body();
+
+    let rows = if let Some(limit) = body.limit {
+        client
+            .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
+                    FROM high_scores
+                    ORDER BY score DESC
+                    LIMIT $1;", &[&limit])
+            .await?
+    }
+    else {
+        client
+            .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
+                    FROM high_scores
+                    ORDER BY score DESC;", &[])
+            .await?
+    };
 
     let scores : Vec<PlayerScore> = rows.iter()
         .map(|row| PlayerScore { index: row.get::<&str, i64>("row_number") - 1, name: row.get("name"), score: row.get("score") })
@@ -125,6 +139,22 @@ async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> any
 
     return Ok(response);
 }
+
+async fn rename_score_http(client : &Client, request : &Request<RenameScoreRequest>) -> anyhow::Result<Response<()>> {
+    let body = &request.body();
+
+    client.execute(
+        "UPDATE high_scores
+            SET name = $1
+            WHERE id = $2;", &[&body.name, &body.id]).await?;
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body(())?;
+
+    return Ok(response);
+}
+
 
 fn load_connection_string() -> Result<String, anyhow::Error> {
     fn get_http_host() -> Result<String, anyhow::Error> {
@@ -203,10 +233,10 @@ async fn inner_main() -> Result<(), anyhow::Error> {
     let request = get_request()?;
 
     match (request.method().as_str(), request.uri().path()) {
-        ("GET", "/api/score/list") => print_output(&get_scores_http(&client).await?)?,
+        ("GET", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/new") => print_output(&new_score(&client, &deserialize(request)?).await?)?,
-        // ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &request).await?)?,
+        ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await?)?,
         _ => print_output(&Response::builder().status(StatusCode::NOT_FOUND).body(())?)?
     };
 

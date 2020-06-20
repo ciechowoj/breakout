@@ -164,7 +164,7 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
         let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Third Player", "score": 3 }"#)?;
         let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 2 }"#)?;
         
-        let actual : Response<Vec<PlayerScore>> = issue_api_request("simple_test", "GET", "/api/score/list", "")?;
+        let actual : Response<Vec<PlayerScore>> = issue_api_request("simple_test", "GET", "/api/score/list", r#"{}"#)?;
 
         let expected = r#"[
             { "index": 0, "name": "Maxymilian TheBest", "score": 1000 },
@@ -213,7 +213,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
             "test_new_rename_api",
             "POST",
             "/api/score/rename",
-            format!(r#"{{ "id": {}, "name": "New Player" }}"#, id).as_str())?;
+            format!(r#"{{ "id": "{}", "name": "New Player" }}"#, id).as_str())?;
 
         assert_eq!(StatusCode::OK, actual.status());
 
@@ -228,7 +228,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
         let expected = r#"[
             { "index": 0, "name": "First Player", "score": 100 },
             { "index": 1, "name": "Second Player", "score": 90 },
-            { "index": 2, "name": "", "score": 85 },
+            { "index": 2, "name": "New Player", "score": 85 },
             { "index": 3, "name": "Third Player", "score": 80 }
         ]"#;
 
