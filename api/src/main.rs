@@ -174,6 +174,16 @@ fn validate_session_id_str(session_id : &str) -> anyhow::Result<bool> {
     return validate_session_id(decoded);
 }
 
+fn validate_proof_of_work_str(session_id : &str, proof_of_work : &str, degree : usize) -> anyhow::Result<bool> {
+    let mut decoded_session_id = [0u8; 32];
+    hex::decode_to_slice(session_id, &mut decoded_session_id)?;
+
+    let mut decoded_proof_of_work = [0u8; 32];
+    hex::decode_to_slice(proof_of_work, &mut decoded_proof_of_work)?;
+
+    return Ok(validate_proof_of_work(decoded_session_id, decoded_proof_of_work, degree));
+}
+
 async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> anyhow::Result<Response<NewScoreResponse>> {
     let body = &request.body();
 
@@ -181,6 +191,14 @@ async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> any
         let response = Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(NewScoreResponse::Error("Invalid session id!".to_owned()))?;
+
+        return Ok(response);
+    }
+
+    if !validate_proof_of_work_str(body.session_id.as_str(), body.proof_of_work.as_str(), 8)? {
+        let response = Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(NewScoreResponse::Error("Invalid proof of work!".to_owned()))?;
 
         return Ok(response);
     }

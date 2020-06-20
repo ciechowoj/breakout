@@ -213,10 +213,15 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
 
         assert_eq!(StatusCode::OK, session_id.status());
         
+        let mut decoded_session_id = [0u8; 32];
+        hex::decode_to_slice(session_id.body(), &mut decoded_session_id)?;
+
+        let proof_of_work = proof_of_work(decoded_session_id, 8);
+
         let request = NewScoreRequest {
             score: 85i64,
             session_id: session_id.body().clone(),
-            proof_of_work: "".to_owned(),
+            proof_of_work: hex::encode_upper(proof_of_work),
             limit: 4i64
         };
 
@@ -284,7 +289,7 @@ async fn test_new_rename_api_invalid_session_id() -> Result<(), Box<dyn std::err
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api_invalid_session_id")?;
         
-        let session_id : Response<String> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
+        let session_id : Response<String> = issue_api_request("test_new_rename_api_invalid_session_id", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
         
@@ -317,3 +322,38 @@ async fn test_new_rename_api_invalid_session_id() -> Result<(), Box<dyn std::err
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_new_rename_api_invalid_proof_of_work() -> Result<(), Box<dyn std::error::Error>> {
+    let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
+        fill_with_test_data("test_new_rename_api_invalid_proof_of_work")?;
+        
+        let session_id : Response<String> = issue_api_request("test_new_rename_api_invalid_proof_of_work", "GET", "/api/session-id/new", r#""#)?;
+
+        assert_eq!(StatusCode::OK, session_id.status());
+
+        let request = NewScoreRequest {
+            score: 85i64,
+            session_id: session_id.body().clone(),
+            proof_of_work: session_id.body().clone(),
+            limit: 4i64
+        };
+
+        let request_json = serde_json::to_string(&request)?;
+
+        let actual : Response<NewScoreResponse> = issue_api_request(
+            "test_new_rename_api_invalid_proof_of_work",
+            "POST",
+            "/api/score/new",
+            request_json.as_str())?;
+        
+        assert_eq!(StatusCode::BAD_REQUEST, actual.status());
+
+        return Ok(());
+    };
+
+    with_database("test_new_rename_api_invalid_proof_of_work", body).await?;
+
+    Ok(())
+}
+

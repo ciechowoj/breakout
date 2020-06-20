@@ -1,4 +1,5 @@
 use uuid::Uuid;
+use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use rand::prelude::*;
 
@@ -57,3 +58,37 @@ pub fn rand256() -> [u8; 32] {
     rand::thread_rng().fill_bytes(&mut result);
     return result;
 }
+
+pub fn validate_proof_of_work(session_id : [u8; 32], proof_of_work : [u8; 32], degree : usize) -> bool {    
+    let sha256 = Sha256::new()
+        .chain(session_id)
+        .chain(proof_of_work)
+        .finalize();
+
+    let num_bytes = degree / 8;
+    let num_bits = degree % 8;
+    let mask = 0u8 >> num_bits << num_bits;
+
+    for i in 0..num_bytes {
+        if sha256[i] != 0 {
+            return false;
+        }
+    }
+
+    if sha256[num_bytes] & mask != 0 {
+        return false;
+    }
+
+    return true;
+}
+
+pub fn proof_of_work(session_id : [u8; 32], degree : usize) -> [u8; 32] {
+    loop {
+        let test = rand256();
+    
+        if validate_proof_of_work(session_id, test, degree) {
+            return test;
+        }
+    }
+}
+
