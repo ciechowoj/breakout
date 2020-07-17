@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "webpack --config webpack.prod.js",
+    "build-dev": "webpack --config webpack.dev.js",
     "start": "webpack-dev-server --open --config webpack.dev.js",
     "deploy": "rsync dist/* rusty-games-hosting:public_html"
   },

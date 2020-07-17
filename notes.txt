@@ -36,6 +36,10 @@
     code /etc/hosts
     systemctl reload apache2
 
+    ## remove https rewrite rules from .htaccess
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
     ## enable mod rewrite and mod_cgi
     sudo a2enmod rewrite
     sudo a2enmod cgi
