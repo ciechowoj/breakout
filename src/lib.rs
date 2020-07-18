@@ -55,7 +55,7 @@ fn reset_canvas_size(canvas : &HtmlCanvasElement) -> Expected<()> {
 }
 
 #[wasm_bindgen]
-pub fn greet() {
+pub async fn wasm_main() {
     struct Recursive {
         value: Rc<dyn Fn(Rc<Recursive>)>,
         context: RefCell<Box<dyn Any>>,

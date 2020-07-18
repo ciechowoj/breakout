@@ -13,6 +13,7 @@ Go to the webpage and play.
 
 ## How to build.
 
-To build & run front-end: `npm run start` from the `www` directory.
-To build web assembly: `npm run build` - prod, `npm run build-dev` - dev
+To run front-end: `npm run start` from the `www` directory.
+To build front-end: `npm run build` - prod, `npm run build-dev` - dev
+To build web assemble: `wasm-pack build`
 To build backend: `cargo build`

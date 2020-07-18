@@ -1,3 +1,3 @@
 import * as wasm from "breakout";
 
-wasm.greet();
+wasm.wasm_main();
