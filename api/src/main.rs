@@ -354,8 +354,12 @@ async fn main() -> anyhow::Result<()> {
 
     return match result {
         Err(error) => {
-            let mut file = open_log_file().unwrap();
-            writeln!(file, "{}", error.to_string()).unwrap();
+            // let mut file = open_log_file().unwrap();
+            // writeln!(file, "{}", error.to_string()).unwrap();
+
+            let mut stderr = std::io::stderr();
+            writeln!(&mut stderr, "{}", error.to_string()).unwrap();
+
             Err(error)
         },
         Ok(()) => Ok(())

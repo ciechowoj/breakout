@@ -5,6 +5,7 @@ mod utils;
 mod dom_utils;
 mod game;
 mod collision;
+mod webapi;
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -18,6 +19,7 @@ use event::*;
 use utils::*;
 use game::*;
 use crate::dom_utils::*;
+use crate::webapi::*;
 use glm::vec2;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -370,7 +372,6 @@ pub fn update_fps(
             elapsed / frame_time * 100f64);
 
         fps_counter.set_inner_html(&frame_time[..]);
-
     }
 
     *last_time = time;

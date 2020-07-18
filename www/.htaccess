@@ -9,3 +9,5 @@ RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 <FilesMatch api$>
     SetHandler cgi-script
 </FilesMatch>
+
+SetEnv SESSION_ID_SALT DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF
