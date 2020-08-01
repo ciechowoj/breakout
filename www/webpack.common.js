@@ -8,13 +8,13 @@ module.exports = {
     filename: "bootstrap.js",
   },
   plugins: [
-    new CopyWebpackPlugin(
-      [
+    new CopyWebpackPlugin({
+      patterns: [
         {
           from: 'index.html',
           force: true
         }
-      ])
+    ]})
   ],
   performance: {
     hints: false

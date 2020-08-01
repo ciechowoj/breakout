@@ -47,3 +47,6 @@
 
     ## enable +x on api
     chmod +x /home/wojciech/breakout/www/dist/api
+
+# See apache logs
+    `tail -n 20 -f /var/log/apache2/error.log`

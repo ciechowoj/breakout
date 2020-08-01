@@ -18,11 +18,7 @@ fn debug_or_release() -> &'static str {
     return "release";
 }
 
-fn issue_api_request<T: serde::de::DeserializeOwned>(
-    database : &str,
-    method : &str,
-    uri : &str,
-    content : &str) -> Result<Response<T>> {
+fn cgi_get_api_exe() -> Result<String> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
     let pkg_name = env::var("CARGO_PKG_NAME")?;
 
@@ -37,32 +33,10 @@ fn issue_api_request<T: serde::de::DeserializeOwned>(
         .to_str()
         .ok_or(anyhow!("Result path contains non-unicode characters."))?;
 
-    let mut split_itr = uri.splitn(2, '?');
-    split_itr.next();
+    return Ok(api_exe.to_owned());
+}
 
-    let query_string = match split_itr.next() {
-        Some(x) => x,
-        None => ""
-    };
-
-    let mut process = Command::new(api_exe)
-        .env("DATABASE_NAME", database)
-        .env("SESSION_ID_SALT", "0000000000000000000000000000000000000000000000000000000000000000")
-        .env("CONTENT_LENGTH", content.len().to_string())
-        .env("REQUEST_METHOD", method)
-        .env("REQUEST_URI", uri)
-        .env("QUERY_STRING", query_string)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()?;
-
-    process.stdin
-        .as_mut()
-        .unwrap()
-        .write_all(content.as_bytes())?;
-
-    let output = process.wait_with_output()?;
-
+fn cgi_output_to_response<T: serde::de::DeserializeOwned>(output : std::process::Output) -> Result<Response<T>> {
     if !output.status.success() {
         println!("status: {}", output.status);
         io::stderr().write_all(&output.stderr)?;
@@ -101,6 +75,84 @@ fn issue_api_request<T: serde::de::DeserializeOwned>(
         .unwrap();
 
     return Ok(response);
+}
+
+fn issue_api_request<T: serde::de::DeserializeOwned>(
+    database : &str,
+    method : &str,
+    uri : &str,
+    content : &str) -> Result<Response<T>> {
+    let api_exe = cgi_get_api_exe()?;
+    let api_exe = api_exe.as_str();
+
+    let mut split_itr = uri.splitn(2, '?');
+    split_itr.next();
+
+    let query_string = match split_itr.next() {
+        Some(x) => x,
+        None => ""
+    };
+
+    let mut process = Command::new(api_exe)
+        .env("DATABASE_NAME", database)
+        .env("SESSION_ID_SALT", "0000000000000000000000000000000000000000000000000000000000000000")
+        .env("CONTENT_LENGTH", content.len().to_string())
+        .env("REQUEST_METHOD", method)
+        .env("REQUEST_URI", uri)
+        .env("QUERY_STRING", query_string)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    process.stdin
+        .as_mut()
+        .unwrap()
+        .write_all(content.as_bytes())?;
+
+    let output = process.wait_with_output()?;
+
+    return cgi_output_to_response(output);
+}
+
+fn issue_api_request_with_authz<T: serde::de::DeserializeOwned>(
+    database : &str,
+    method : &str,
+    uri : &str,
+    content : &str,
+    credentials : &str) -> Result<Response<T>> {
+    let api_exe = cgi_get_api_exe()?;
+    let api_exe = api_exe.as_str();
+
+    let mut split_itr = uri.splitn(2, '?');
+    split_itr.next();
+
+    let query_string = match split_itr.next() {
+        Some(x) => x,
+        None => ""
+    };
+
+    let credentials = format!("Basic {}", base64::encode(credentials.as_bytes()));
+
+    let mut process = Command::new(api_exe)
+        .env("DATABASE_NAME", database)
+        .env("SESSION_ID_SALT", "0000000000000000000000000000000000000000000000000000000000000000")
+        .env("CONTENT_LENGTH", content.len().to_string())
+        .env("REQUEST_METHOD", method)
+        .env("REQUEST_URI", uri)
+        .env("QUERY_STRING", query_string)
+        .env("HTTP_AUTHORIZATION", credentials)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    process.stdin
+        .as_mut()
+        .unwrap()
+        .write_all(content.as_bytes())?;
+
+    let output = process.wait_with_output()?;
+
+    return cgi_output_to_response(output);
 }
 
 async fn with_database(
@@ -182,7 +234,7 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
         let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Third Player", "score": 3 }"#)?;
         let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 2 }"#)?;
         
-        let actual : Response<Vec<PlayerScore>> = issue_api_request("simple_test", "GET", "/api/score/list", r#"{}"#)?;
+        let actual : Response<Vec<PlayerScore>> = issue_api_request("simple_test", "POST", "/api/score/list", r#"{}"#)?;
 
         let expected = r#"[
             { "index": 0, "name": "Maxymilian TheBest", "score": 1000 },
@@ -198,6 +250,55 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     with_database("simple_test", body).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_init_checks_admin_password() -> Result<(), Box<dyn std::error::Error>> {
+    let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
+        let response : Response<()> = issue_api_request(
+            "test_init_checks_admin_password",
+            "POST",
+            "/api/admin/initialize",
+            r#""#)?;
+
+        assert_eq!(StatusCode::UNAUTHORIZED, response.status());
+
+        let response : Response<()> = issue_api_request_with_authz(
+            "test_init_checks_admin_password",
+            "POST",
+            "/api/admin/initialize",
+            r#""#,
+            "admin:password")?;
+
+        assert_eq!(StatusCode::OK, response.status());
+
+        let response : Response<()> = issue_api_request_with_authz(
+            "test_init_checks_admin_password",
+            "POST",
+            "/api/admin/initialize",
+            r#""#,
+            "admin:wrong-password")?;
+
+        assert_eq!(StatusCode::UNAUTHORIZED, response.status());
+
+        return Ok(());
+    };
+
+    with_database("test_init_checks_admin_password", body).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_init_creates_default_scores() -> Result<(), Box<dyn std::error::Error>> {
+    let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
+        
+        return Ok(());
+    };
+
+    with_database("test_init_creates_default_scores", body).await?;
 
     Ok(())
 }
@@ -257,7 +358,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
 
         let actual : Response<Vec<PlayerScore>> = issue_api_request(
             "test_new_rename_api",
-            "GET",
+            "POST",
             "/api/score/list",
             r#"{ "limit": 4 }"#)?;
 

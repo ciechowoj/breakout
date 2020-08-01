@@ -5,8 +5,8 @@ const common = require('./webpack.common.js');
 module.exports = merge(common, {
   mode: 'production',
   plugins: [
-    new CopyWebpackPlugin(
-      [
+    new CopyWebpackPlugin({
+      patterns: [
         {
           from: '.htaccess',
           force: true
@@ -15,6 +15,6 @@ module.exports = merge(common, {
           from: '../api/target/release/api',
           force: true
         }
-      ])
+    ]})
   ],
 });

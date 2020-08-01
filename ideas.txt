@@ -30,6 +30,10 @@
 - Touch input / mobile control
     - The scoreboard doesn't work on mobile
 
+- Improve hardcoded secrets handling:
+    - **/connection-string.fn
+    - **/admin-credentials.fn
+
 - Publish on the internet
     - Add adds
     ✓ Buy domain

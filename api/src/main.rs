@@ -4,7 +4,7 @@ use std::io;
 use std::io::Read;
 use std::io::prelude::*;
 use std::str::FromStr;
-use std::fs::OpenOptions;
+use std::str;
 use tokio_postgres::{Client, NoTls};
 use tokio_postgres::error::SqlState;
 use serde::{de};
@@ -13,7 +13,9 @@ use uuid::Uuid;
 use apilib::*;
 use sha2::{Sha256, Digest};
 use http::{Request, Response, StatusCode};
+use http::header::*;
 use hex;
+use base64;
 
 // GET /api/score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST /api/score/add { "player": "Maxymilian TheBest", "score": 1000 }
@@ -35,6 +37,7 @@ pub struct Request {
 
 fn get_request() -> anyhow::Result<Request<String>> {
     const CONTENT_LENGTH : &'static str = "CONTENT_LENGTH";
+    const HTTP_AUTHORIZATION : &'static str = "HTTP_AUTHORIZATION";
     const REQUEST_METHOD : &'static str = "REQUEST_METHOD";
     const REQUEST_URI : &'static str = "REQUEST_URI";
 
@@ -50,9 +53,17 @@ fn get_request() -> anyhow::Result<Request<String>> {
         io::stdin().read_to_string(&mut content)?;
     }
 
-    let request = Request::builder()
+    let builder = Request::builder()
         .method(env::var(REQUEST_METHOD)?.as_str())
-        .uri(env::var(REQUEST_URI)?)
+        .uri(env::var(REQUEST_URI)?);
+
+    let builder = match env::var(HTTP_AUTHORIZATION) {
+        Ok(value) => Ok(builder.header(AUTHORIZATION, value.as_str())),
+        Err(env::VarError::NotPresent) => Ok(builder),
+        Err(error @ env::VarError::NotUnicode(_)) => Err(error)
+    }?;
+
+    let request = builder
         .body(content)?;
         
     return Ok(request);
@@ -96,25 +107,46 @@ async fn add_score(client : &Client, request : &Request<AddScoreRequest>) -> any
 async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest>) -> anyhow::Result<Response<Vec<PlayerScore>>> {
     let body = request.body();
 
-    let rows = if let Some(limit) = body.limit {
+    let result = if let Some(limit) = body.limit {
         client
             .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
                     FROM high_scores
                     ORDER BY score DESC
                     LIMIT $1;", &[&limit])
-            .await?
+            .await
     }
     else {
         client
             .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
                     FROM high_scores
                     ORDER BY score DESC;", &[])
-            .await?
+            .await
     };
 
-    let scores : Vec<PlayerScore> = rows.iter()
-        .map(|row| PlayerScore { index: row.get::<&str, i64>("row_number") - 1, name: row.get("name"), score: row.get("score") })
-        .collect();
+    let scores = match result {
+        Err(error) => {
+            if let Some(code) = error.code() {
+                if *code == SqlState::UNDEFINED_TABLE {
+                    Ok(Vec::<PlayerScore>::new())
+                }
+                else {
+                    Err(error)    
+                }
+            }
+            else {
+                Err(error)
+            }            
+        },
+        Ok(rows) => {
+            let scores = rows.iter()
+                .map(|row| PlayerScore { 
+                    index: row.get::<&str, i64>("row_number") - 1, 
+                    name: row.get("name"), score: row.get("score") 
+                })
+                .collect();
+            Ok(scores)
+        }
+    }?;
 
     let response = Response::builder()
         .status(StatusCode::OK)
@@ -252,20 +284,99 @@ async fn rename_score_http(client : &Client, request : &Request<RenameScoreReque
     return Ok(response);
 }
 
+async fn initialize(_client : &Client, request : &Request<()>) -> anyhow::Result<Response<()>> {
+    fn unauthorized() -> anyhow::Result<Response<()>> {
+        let response = Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(WWW_AUTHENTICATE, "Basic realm=\"Site Management\", charset=\"UTF-8\"")
+            .body(())?;
 
-fn load_connection_string() -> Result<String, anyhow::Error> {
-    fn get_http_host() -> Result<String, anyhow::Error> {
-        const HTTP_HOST : &'static str = "HTTP_HOST";
-
-        let host : String = match env::var(HTTP_HOST) {
-            Ok(value) => Ok(value),
-            Err(env::VarError::NotPresent) => Ok("".to_owned()),
-            Err(error @ env::VarError::NotUnicode(_)) => Err(error)
-        }?;
-
-        return Ok(host);
+        return Ok(response);
     }
 
+    fn parse_credentials(credentials : &str) -> anyhow::Result<(String, String)> {
+        let credentials = base64::decode(credentials)?;
+        let credentials = str::from_utf8(&credentials)?;
+        let mut itr = credentials.split(":");
+
+        let login = match itr.next() {
+            Some(login) => login,
+            None => { return Err(anyhow!("Missing login!")); }
+        };
+
+        let password = match itr.next() {
+            Some(password) => password,
+            None => { return Err(anyhow!("Missing password!")); }
+        };
+
+        match itr.next() {
+            Some(_) => { return Err(anyhow!("Invalid authentication header!")); }
+            None => ()
+        };
+
+        return Ok((login.to_owned(), password.to_owned()));
+    }
+
+    match request.headers().get(AUTHORIZATION) {
+        Some(header) => {
+            let header = header.to_str()?;
+
+            let header = match header.strip_prefix("Basic ") {
+                Some(suffix) => suffix,
+                None => { return unauthorized(); }
+            };
+
+            let (login, password) = parse_credentials(header)?;
+
+            eprintln!("login: {:?}, password: {:?}", login, password);
+
+            let (admin_login, admin_hash, admin_salt) = include!("../admin-credentials.fn");
+
+            if login != admin_login {
+                return unauthorized();
+            }
+
+            let password_bytes = password.as_bytes();
+
+            let mut admin_salt_bytes = [0u8; 32];
+            hex::decode_to_slice(admin_salt, &mut admin_salt_bytes)?;
+
+            let sha256 = Sha256::new()
+                .chain(password_bytes)
+                .chain(admin_salt_bytes)
+                .finalize();
+    
+            let hash = hex::encode_upper(sha256);
+
+            if hash != admin_hash {
+                return unauthorized();
+            }
+        }
+        None => {
+            return unauthorized();
+        }
+    }
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .body(())?;
+
+    return Ok(response);
+}
+
+fn get_http_host() -> Result<String, anyhow::Error> {
+    const HTTP_HOST : &'static str = "HTTP_HOST";
+
+    let host : String = match env::var(HTTP_HOST) {
+        Ok(value) => Ok(value),
+        Err(env::VarError::NotPresent) => Ok("".to_owned()),
+        Err(error @ env::VarError::NotUnicode(_)) => Err(error)
+    }?;
+
+    return Ok(host);
+}
+
+fn load_connection_string() -> Result<String, anyhow::Error> {
     fn get_database_name() -> Result<Option<String>> {
         const DATABASE_NAME : &'static str = "DATABASE_NAME";
 
@@ -298,20 +409,11 @@ fn print_output<T : serde::Serialize>(response : &Response<T>) -> anyhow::Result
     return Ok(());
 }
 
-fn open_log_file() -> Result<std::fs::File, anyhow::Error> {
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .write(true)
-        .open("error.log")?;
-
-    return Ok(file);
-}
-
 fn deserialize<T>(request : Request<String>) -> anyhow::Result<Request<T>>
     where for<'de> T: de::Deserialize<'de>
 {
     let (parts, body) = request.into_parts();
+    let body = if body == "" { "null".to_owned() } else { body };
     let body = serde_json::from_str(&body)?;
     Ok(Request::from_parts(parts, body))
 }
@@ -338,10 +440,11 @@ async fn inner_main() -> Result<(), anyhow::Error> {
     });
     
     match (request.method().as_str(), request.uri().path()) {
-        ("GET", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await?)?,
+        ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/new") => print_output(&new_score(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await?)?,
+        ("POST", "/api/admin/initialize") => print_output(&initialize(&client, &deserialize(request)?).await?)?,
         _ => print_output(&Response::builder().status(StatusCode::NOT_FOUND).body(())?)?
     };
 
@@ -354,9 +457,6 @@ async fn main() -> anyhow::Result<()> {
 
     return match result {
         Err(error) => {
-            // let mut file = open_log_file().unwrap();
-            // writeln!(file, "{}", error.to_string()).unwrap();
-
             let mut stderr = std::io::stderr();
             writeln!(&mut stderr, "{}", error.to_string()).unwrap();
 

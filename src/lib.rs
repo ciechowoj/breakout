@@ -21,6 +21,7 @@ use game::*;
 use crate::dom_utils::*;
 use crate::webapi::*;
 use glm::vec2;
+use apilib::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -58,6 +59,9 @@ fn reset_canvas_size(canvas : &HtmlCanvasElement) -> Expected<()> {
 
 #[wasm_bindgen]
 pub async fn wasm_main() {
+    console_error_panic_hook::set_once();
+    list_scores_http(&ListScoresRequest { limit : None }).await.unwrap();
+
     struct Recursive {
         value: Rc<dyn Fn(Rc<Recursive>)>,
         context: RefCell<Box<dyn Any>>,

@@ -10,4 +10,6 @@ RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
     SetHandler cgi-script
 </FilesMatch>
 
+SetEnvIfNoCase Authorization "(Basic .+)" HTTP_AUTHORIZATION=$1
 SetEnv SESSION_ID_SALT DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF
+SetEnv DATABASE_NAME rusty_games

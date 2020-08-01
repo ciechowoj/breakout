@@ -29,15 +29,17 @@
   },
   "homepage": "https://github.com/rustwasm/create-wasm-app#readme",
   "dependencies": {
-    "minimist": ">=0.2.1",
+    "breakout": "file:../pkg",
     "kind-of": ">=6.0.3",
-    "breakout": "file:../pkg"
+    "minimist": ">=0.2.1",
+    "webpack-shell-plugin": "^0.5.0",
+    "webpack-synchronizable-shell-plugin": "0.0.7"
   },
   "devDependencies": {
-    "copy-webpack-plugin": "^5.0.0",
-    "webpack": "^4.29.3",
+    "copy-webpack-plugin": "^6.0.3",
+    "webpack": "^4.44.0",
     "webpack-cli": "^3.1.0",
-    "webpack-dev-server": "^3.1.5",
+    "webpack-dev-server": "^3.11.0",
     "webpack-merge": "^4.2.2"
   }
 }
