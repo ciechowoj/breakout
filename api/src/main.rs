@@ -201,7 +201,33 @@ fn validate_session_id(session_id : [u8; 32]) -> anyhow::Result<bool> {
     return Ok(true);
 }
 
-async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> anyhow::Result<Response<NewScoreResponse>> {
+async fn create_high_scores_table(client : &Client) -> anyhow::Result<()> {
+    client.execute(
+        "CREATE TABLE IF NOT EXISTS high_scores (
+            id uuid PRIMARY KEY,
+            name varchar(128) NOT NULL,
+            score bigint,
+            created_time timestamptz);", &[]).await?;
+
+    return Ok(());
+}
+
+async fn create_default_high_scores(client : &Client) -> anyhow::Result<()> {
+    create_high_scores_table(client).await?;
+
+    let statement = client.prepare(
+        "INSERT INTO high_scores(id, name, score, created_time) VALUES ($1, $2, $3, $4);"
+    ).await?;
+
+    client.execute(&statement, &[&Uuid::new_v4(), &"Alistair", &8000i64, &Utc::now()]).await?;
+    client.execute(&statement, &[&Uuid::new_v4(), &"Ferris", &4000i64, &Utc::now()]).await?;
+    client.execute(&statement, &[&Uuid::new_v4(), &"Gordon", &2000i64, &Utc::now()]).await?;
+    client.execute(&statement, &[&Uuid::new_v4(), &"Voytech", &1000i64, &Utc::now()]).await?;
+
+    return Ok(());
+}
+
+async fn new_score_http(client : &Client, request : &Request<NewScoreRequest>) -> anyhow::Result<Response<NewScoreResponse>> {
     let body = &request.body();
 
     let mut decoded_session_id = [0u8; 32];
@@ -226,12 +252,7 @@ async fn new_score(client : &Client, request : &Request<NewScoreRequest>) -> any
         return Ok(response);
     }
 
-    client.execute(
-        "CREATE TABLE IF NOT EXISTS high_scores (
-            id uuid PRIMARY KEY,
-            name varchar(128) NOT NULL,
-            score bigint,
-            created_time timestamptz);", &[]).await?;
+    create_high_scores_table(client).await?;
 
     let id = Uuid::from_slice(&decoded_session_id[16..])?;
 
@@ -284,7 +305,7 @@ async fn rename_score_http(client : &Client, request : &Request<RenameScoreReque
     return Ok(response);
 }
 
-async fn initialize(_client : &Client, request : &Request<()>) -> anyhow::Result<Response<()>> {
+async fn authenticate(request : &Request<()>) -> anyhow::Result<Response<()>> {
     fn unauthorized() -> anyhow::Result<Response<()>> {
         let response = Response::builder()
             .status(StatusCode::UNAUTHORIZED)
@@ -328,8 +349,6 @@ async fn initialize(_client : &Client, request : &Request<()>) -> anyhow::Result
 
             let (login, password) = parse_credentials(header)?;
 
-            eprintln!("login: {:?}, password: {:?}", login, password);
-
             let (admin_login, admin_hash, admin_salt) = include!("../admin-credentials.fn");
 
             if login != admin_login {
@@ -351,11 +370,28 @@ async fn initialize(_client : &Client, request : &Request<()>) -> anyhow::Result
             if hash != admin_hash {
                 return unauthorized();
             }
+            else {
+                let response = Response::builder()
+                    .status(StatusCode::OK)
+                    .body(())?;
+
+                return Ok(response);
+            }
         }
         None => {
             return unauthorized();
         }
     }
+}
+
+async fn initialize(client : &Client, request : &Request<()>) -> anyhow::Result<Response<()>> {
+    let response = authenticate(request).await?;
+
+    if response.status() != StatusCode::OK {
+        return Ok(response);
+    }
+
+    create_default_high_scores(client).await?;
 
     let response = Response::builder()
         .status(StatusCode::OK)
@@ -442,7 +478,7 @@ async fn inner_main() -> Result<(), anyhow::Error> {
     match (request.method().as_str(), request.uri().path()) {
         ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await?)?,
-        ("POST", "/api/score/new") => print_output(&new_score(&client, &deserialize(request)?).await?)?,
+        ("POST", "/api/score/new") => print_output(&new_score_http(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/admin/initialize") => print_output(&initialize(&client, &deserialize(request)?).await?)?,
         _ => print_output(&Response::builder().status(StatusCode::NOT_FOUND).body(())?)?
