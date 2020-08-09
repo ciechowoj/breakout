@@ -1,6 +1,3 @@
-use std::num::*;
-use wasm_bindgen::prelude::*;
-use serde_json;
 
 pub fn set_panic_hook() {
     // When the `console_error_panic_hook` feature is enabled, we can call the
@@ -19,36 +16,15 @@ macro_rules! log {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Error {
-    Msg(&'static str),
-    Str(String),
-    Js(JsValue)
+pub trait JsValueError<T> {
+    fn to_anyhow(self) -> anyhow::Result<T>;
 }
 
-impl From<JsValue> for Error {
-    fn from(js_value: JsValue) -> Self {
-        Error::Js(js_value)
+impl<T> JsValueError<T> for std::result::Result<T, wasm_bindgen::JsValue> {
+    fn to_anyhow(self) -> anyhow::Result<T> {
+        return match self {
+            Ok(value) => Ok(value),
+            Err(error) => Err(anyhow::anyhow!("{:?}", error))
+        };
     }
 }
-
-impl From<strum::ParseError> for Error {
-    fn from(error: strum::ParseError) -> Self {
-        Error::Str(error.to_string())
-    }
-}
-
-impl From<serde_json::error::Error> for Error {
-    fn from(error: serde_json::error::Error) -> Self {
-        Error::Str(error.to_string())
-    }
-}
-
-impl From<ParseFloatError> for Error {
-    fn from(error: ParseFloatError) -> Self {
-        Error::Str(error.to_string())
-    }
-}
-
-pub type ExpectedUnit = std::result::Result<(), Error>;
-pub type Expected<T> = std::result::Result<T, Error>;

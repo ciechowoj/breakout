@@ -1,5 +1,6 @@
-use js_sys::{Array, Function};
 use crate::utils::*;
+
+use js_sys::{Array, Function};
 use web_sys::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -188,9 +189,9 @@ pub struct Touch {
 }
 
 impl TryFrom<JsValue> for Touch {
-    type Error = Error;
+    type Error = anyhow::Error;
 
-    fn try_from(js_value: JsValue) -> Expected<Self> {
+    fn try_from(js_value: JsValue) -> anyhow::Result<Self> {
         Ok(Touch {
             identifier: get_property_as_f64(&js_value, "identifier")? as u32,
             screen_x: get_property_as_f64(&js_value, "screenX")? as f32,
@@ -249,27 +250,27 @@ pub struct TouchEvent {
 }
 
 impl TryFrom<JsValue> for TouchEventType {
-    type Error = Error;
+    type Error = anyhow::Error;
 
-    fn try_from(js_value: JsValue) -> Expected<Self> {
+    fn try_from(js_value: JsValue) -> anyhow::Result<Self> {
         let error = "Failed to convert JsValue to TouchEventType!";
         let r#type = js_value.as_string()
-            .ok_or(Error::Msg(error))?;
+            .ok_or(anyhow::anyhow!(error))?;
 
         match r#type.as_str() {
             "touchcancel" => Ok(TouchEventType::TouchCancel),
             "touchend" => Ok(TouchEventType::TouchEnd),
             "touchmove" => Ok(TouchEventType::TouchMove),
             "touchstart" => Ok(TouchEventType::TouchStart),
-            _ => Err(Error::Msg(error))
+            _ => Err(anyhow::anyhow!(error))
         }
     }
 }
 
 impl TryFrom<JsValue> for TouchEvent {
-    type Error = Error;
+    type Error = anyhow::Error;
 
-    fn try_from(js_value: JsValue) -> Expected<Self> {
+    fn try_from(js_value: JsValue) -> anyhow::Result<Self> {
         let touches_property = get_property(&js_value, "touches")?;
         let item_js_value = get_property(&touches_property, "item")?;
         let item_method : &Function = item_js_value.as_ref().unchecked_ref();
@@ -284,7 +285,7 @@ impl TryFrom<JsValue> for TouchEvent {
             let js_result = js_sys::Reflect::apply(
                 &item_method,
                 &touches_property,
-                &array)?;
+                &array).to_anyhow()?;
 
             touches.push(Touch::try_from(js_result)?);
         }
@@ -297,24 +298,24 @@ impl TryFrom<JsValue> for TouchEvent {
 }
 
 pub trait InputEventTarget {
-    fn set_onmousemove(&self, function : Box<dyn FnMut(InputEvent) -> ExpectedUnit>);
-    fn set_ontouchstart(&self, function : Box<dyn FnMut(TouchEvent) -> ExpectedUnit>);
-    fn set_ontouchmove(&self, function : Box<dyn FnMut(TouchEvent) -> ExpectedUnit>);
-    fn set_ontouchend(&self, function : Box<dyn FnMut(TouchEvent) -> ExpectedUnit>);
-    fn set_ontouchcancel(&self, function : Box<dyn FnMut(TouchEvent) -> ExpectedUnit>);
+    fn set_onmousemove(&self, function : Box<dyn FnMut(InputEvent) -> anyhow::Result<()>>);
+    fn set_ontouchstart(&self, function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>);
+    fn set_ontouchmove(&self, function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>);
+    fn set_ontouchend(&self, function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>);
+    fn set_ontouchcancel(&self, function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>);
 }
 
-fn get_property(js_value : &JsValue, id : &'static str) -> Expected<JsValue> {
-    let property = js_sys::Reflect::get(&js_value, &JsValue::from_str(id))?;
+fn get_property(js_value : &JsValue, id : &'static str) -> anyhow::Result<JsValue> {
+    let property = js_sys::Reflect::get(&js_value, &JsValue::from_str(id)).to_anyhow()?;
     return Ok(property);
 }
 
-fn get_property_as_f64(js_value : &JsValue, id : &'static str) -> Expected<f64> {
-    fn error_message(id : &'static str) -> Error {
+fn get_property_as_f64(js_value : &JsValue, id : &'static str) -> anyhow::Result<f64> {
+    fn error_message(id : &'static str) -> anyhow::Error {
         let mut message = "Cannot convert the '".to_owned();
         message.push_str(id);
         message.push_str("' property to f64!");
-        return Error::Str(message);
+        return anyhow::anyhow!("{}", message);
     }
 
     let property = get_property(js_value, id)?;
@@ -325,12 +326,12 @@ fn get_property_as_f64(js_value : &JsValue, id : &'static str) -> Expected<f64> 
     };
 }
 
-fn get_property_as_usize(js_value : &JsValue, id : &'static str) -> Expected<usize> {
-    fn error_message(id : &'static str) -> Error {
+fn get_property_as_usize(js_value : &JsValue, id : &'static str) -> anyhow::Result<usize> {
+    fn error_message(id : &'static str) -> anyhow::Error {
         let mut message = "Cannot convert the '".to_owned();
         message.push_str(id);
         message.push_str("' property to usize!");
-        return Error::Str(message);
+        return anyhow::anyhow!("{}", message);
     }
 
     let property = get_property(js_value, id)?;
@@ -347,7 +348,7 @@ fn get_property_as_usize(js_value : &JsValue, id : &'static str) -> Expected<usi
 }
 
 impl InputEventTarget for HtmlElement {
-    fn set_onmousemove(&self, mut function : Box<dyn FnMut(InputEvent) -> ExpectedUnit>) {
+    fn set_onmousemove(&self, mut function : Box<dyn FnMut(InputEvent) -> anyhow::Result<()>>) {
         let closure : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
 
             let offset_x = get_property_as_f64(&js_value, "offsetX").unwrap();
@@ -367,7 +368,7 @@ impl InputEventTarget for HtmlElement {
         closure.forget();
     }
 
-    fn set_ontouchstart(&self, mut function : Box<dyn FnMut(TouchEvent) -> ExpectedUnit>) {
+    fn set_ontouchstart(&self, mut function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>) {
         let closure : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             function(TouchEvent::try_from(js_value).unwrap()).unwrap();
         });
@@ -378,7 +379,7 @@ impl InputEventTarget for HtmlElement {
         closure.forget();
     }
     
-    fn set_ontouchmove(&self, mut function : Box<dyn FnMut(TouchEvent) -> ExpectedUnit>) {
+    fn set_ontouchmove(&self, mut function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>) {
         let closure : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             function(TouchEvent::try_from(js_value).unwrap()).unwrap();
         });
@@ -389,7 +390,7 @@ impl InputEventTarget for HtmlElement {
         closure.forget();
     }
 
-    fn set_ontouchend(&self, mut function : Box<dyn FnMut(TouchEvent) -> ExpectedUnit>) {
+    fn set_ontouchend(&self, mut function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>) {
         let closure : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             function(TouchEvent::try_from(js_value).unwrap()).unwrap();
         });
@@ -400,7 +401,7 @@ impl InputEventTarget for HtmlElement {
         closure.forget();
     }
 
-    fn set_ontouchcancel(&self, mut function : Box<dyn FnMut(TouchEvent) -> ExpectedUnit>) {
+    fn set_ontouchcancel(&self, mut function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>) {
         let closure : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             function(TouchEvent::try_from(js_value).unwrap()).unwrap();
         });
@@ -430,7 +431,7 @@ impl EventQueues {
     }
 
     pub fn bind_all_queues(event_queues : Weak<RefCell<EventQueues>>, source : &HtmlElement) {
-        let closure = Box::new(move |value : TouchEvent| -> ExpectedUnit {
+        let closure = Box::new(move |value : TouchEvent| -> anyhow::Result<()> {
             match event_queues.upgrade() {
                 Some(event_queues) => event_queues.borrow_mut().touch_events.push(value),
                 None => ()

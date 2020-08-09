@@ -19,9 +19,7 @@ use event::*;
 use utils::*;
 use game::*;
 use crate::dom_utils::*;
-use crate::webapi::*;
 use glm::vec2;
-use apilib::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -39,7 +37,7 @@ fn now_sec(performance : &Performance) -> f64 {
     return sec_to_ms(performance.now());
 }
 
-fn reset_canvas_size(canvas : &HtmlCanvasElement) -> Expected<()> {
+fn reset_canvas_size(canvas : &HtmlCanvasElement) -> anyhow::Result<()> {
     let mut scroll_width = canvas.scroll_width();
     let mut scroll_height = canvas.scroll_height();
 
@@ -60,7 +58,6 @@ fn reset_canvas_size(canvas : &HtmlCanvasElement) -> Expected<()> {
 #[wasm_bindgen]
 pub async fn wasm_main() {
     console_error_panic_hook::set_once();
-    list_scores_http(&ListScoresRequest { limit : None }).await.unwrap();
 
     struct Recursive {
         value: Rc<dyn Fn(Rc<Recursive>)>,
@@ -79,14 +76,14 @@ pub async fn wasm_main() {
         input_events : Rc<RefCell<Vec<InputEvent>>>,
         update_struct : Rc<Recursive>) {
 
-        fn get_code(js_value : JsValue) -> Expected<KeyCode> {
-            let code = js_sys::Reflect::get(&js_value, &JsValue::from_str("code"))?;
-            let code = code.as_string().ok_or(Error::Msg("Expected 'code' field in KeyboardEvent!"))?;
+        fn get_code(js_value : JsValue) -> anyhow::Result<KeyCode> {
+            let code = js_sys::Reflect::get(&js_value, &JsValue::from_str("code")).to_anyhow()?;
+            let code = code.as_string().ok_or(anyhow::anyhow!("Expected 'code' field in KeyboardEvent!"))?;
             let code = KeyCode::from_str(&code.to_string())?;
             return Ok(code);
         };
 
-        fn js_to_keydown_event(js_value : JsValue) -> Expected<InputEvent> {
+        fn js_to_keydown_event(js_value : JsValue) -> anyhow::Result<InputEvent> {
             let event = InputEvent::KeyDown { 
                 code: get_code(js_value)?
             }; 
@@ -94,7 +91,7 @@ pub async fn wasm_main() {
             return Ok(event);
         }
 
-        fn js_to_keyup_event(js_value : JsValue) -> Expected<InputEvent> {
+        fn js_to_keyup_event(js_value : JsValue) -> anyhow::Result<InputEvent> {
             let event = InputEvent::KeyUp {
                 code: get_code(js_value)?
             };
@@ -102,12 +99,12 @@ pub async fn wasm_main() {
             return Ok(event);
         }
 
-        fn js_to_mousemove_event(js_value : JsValue) -> Expected<InputEvent> {
-            let offset_x = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetX"))?;
-            let offset_x = offset_x.as_f64().ok_or(Error::Msg("Expected 'offsetX' field in MouseEvent!"))?;
+        fn js_to_mousemove_event(js_value : JsValue) -> anyhow::Result<InputEvent> {
+            let offset_x = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetX")).to_anyhow()?;
+            let offset_x = offset_x.as_f64().ok_or(anyhow::anyhow!("Expected 'offsetX' field in MouseEvent!"))?;
 
-            let offset_y = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetY"))?;
-            let offset_y = offset_y.as_f64().ok_or(Error::Msg("Expected 'offsetY' field in MouseEvent!"))?;
+            let offset_y = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetY")).to_anyhow()?;
+            let offset_y = offset_y.as_f64().ok_or(anyhow::anyhow!("Expected 'offsetY' field in MouseEvent!"))?;
 
             let event = InputEvent::MouseMove { 
                 x: offset_x,
@@ -146,7 +143,7 @@ pub async fn wasm_main() {
         canvas.set_onmousemove(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
 
-        let on_touchstart : Box<dyn FnMut(event::TouchEvent) -> ExpectedUnit> = Box::new(move |value : event::TouchEvent| -> ExpectedUnit {
+        let on_touchstart : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
             for touch in value.touches {
                 log!("on_touchstart: {:?}", touch);
             }
@@ -154,7 +151,7 @@ pub async fn wasm_main() {
             return Ok(());
         });
 
-        let set_ontouchmove : Box<dyn FnMut(event::TouchEvent) -> ExpectedUnit> = Box::new(move |value : event::TouchEvent| -> ExpectedUnit {
+        let set_ontouchmove : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
             for touch in value.touches {
                 log!("set_ontouchmove: {:?}", touch);
             }
@@ -162,7 +159,7 @@ pub async fn wasm_main() {
             return Ok(());
         });
 
-        let set_ontouchend : Box<dyn FnMut(event::TouchEvent) -> ExpectedUnit> = Box::new(move |value : event::TouchEvent| -> ExpectedUnit {
+        let set_ontouchend : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
             for touch in value.touches {
                 log!("set_ontouchend: {:?}", touch);
             }
@@ -170,7 +167,7 @@ pub async fn wasm_main() {
             return Ok(());
         });
 
-        let set_ontouchcancel : Box<dyn FnMut(event::TouchEvent) -> ExpectedUnit> = Box::new(move |value : event::TouchEvent| -> ExpectedUnit {
+        let set_ontouchcancel : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
             for touch in value.touches {
                 log!("set_ontouchcancel: {:?}", touch);
             }
@@ -188,7 +185,7 @@ pub async fn wasm_main() {
         document : &Document,
         canvas : &HtmlCanvasElement,
         overlay : HtmlElement,
-        window : Window) -> Expected<()> {
+        window : Window) -> anyhow::Result<()> {
     
         let performance = window.performance().expect("performance should be available");
 
@@ -310,10 +307,10 @@ pub fn update(
     event_queues : &EventQueues,
     rendering_context : &CanvasRenderingContext2d,
     overlay : &HtmlElement,
-    time : f64) -> Expected<()> {
+    time : f64) -> anyhow::Result<()> {
     
     let canvas = rendering_context.canvas()
-        .ok_or(Error::Msg("Failed to get canvas from rendering context."))?;
+        .ok_or(anyhow::anyhow!("Failed to get canvas from rendering context."))?;
 
     let mut width = canvas.width();
     let mut height = canvas.height();
@@ -333,12 +330,12 @@ pub fn update(
     if game_state.is_none() {
         *context = Box::new(init(canvas_size, time));
         let game_state = context.downcast_mut::<GameState>()
-            .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
+            .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
         game::init_overlay(game_state, overlay, time)?;
     }
 
     let game_state = context.downcast_mut::<GameState>()
-        .ok_or(Error::Msg("Failed to downcast context to GameState!"))?;
+        .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
 
     game::update(game_state, input_events, event_queues, canvas_size, time)?;
     game::update_overlay(game_state, overlay, time)?;
@@ -351,9 +348,9 @@ pub fn update_fps(
     last_time : &mut f64,
     overlay : &HtmlElement,
     elapsed : f64,
-    time : f64) -> Expected<()> {
+    time : f64) -> anyhow::Result<()> {
 
-    let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
+    let document = overlay.owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
     if let None = document.get_element_by_id("fps-counter") {
         let fps_counter = document.create_element("span").unwrap();

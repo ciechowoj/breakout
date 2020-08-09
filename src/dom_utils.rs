@@ -1,19 +1,19 @@
+use crate::utils::*;
 use web_sys::*;
 use wasm_bindgen::JsCast;
-use crate::utils::*;
 
-pub fn create_html_element(document : &Document, tag : &str, id : &str) -> Expected<HtmlElement> {
-    let element = document.create_element(tag)?;
+pub fn create_html_element(document : &Document, tag : &str, id : &str) -> anyhow::Result<HtmlElement> {
+    let element = document.create_element(tag).to_anyhow()?;
     let element = element.dyn_into::<HtmlElement>()
-        .map_err(|_| Error::Msg("Failed to cast 'Element' to 'HtmlElement'."))?;
+        .map_err(|_| anyhow::anyhow!("Failed to cast 'Element' to 'HtmlElement'."))?;
     element.set_id(id);
     return Ok(element);
 }
 
-pub fn try_get_html_element_by_id(document : &Document, id : &str) -> Expected<Option<HtmlElement>> {
+pub fn try_get_html_element_by_id(document : &Document, id : &str) -> anyhow::Result<Option<HtmlElement>> {
     if let Some(element) = document.get_element_by_id(id) {
         let element = element.dyn_into::<web_sys::HtmlElement>()
-            .map_err(|_| Error::Msg("Failed to cast 'Element' to 'HtmlElement'."))?;
+            .map_err(|_| anyhow::anyhow!("Failed to cast 'Element' to 'HtmlElement'."))?;
     
         return Ok(Some(element));
     }
@@ -22,28 +22,28 @@ pub fn try_get_html_element_by_id(document : &Document, id : &str) -> Expected<O
     }
 }
 
-pub fn get_html_element_by_id(document : &Document, id : &str) -> Expected<HtmlElement> {
+pub fn get_html_element_by_id(document : &Document, id : &str) -> anyhow::Result<HtmlElement> {
     if let Some(element) = document.get_element_by_id(id) {
         let element = element.dyn_into::<web_sys::HtmlElement>()
-            .map_err(|_| Error::Msg("Failed to cast 'Element' to 'HtmlElement'."))?;
+            .map_err(|_| anyhow::anyhow!("Failed to cast 'Element' to 'HtmlElement'."))?;
     
         return Ok(element);
     }
     else {
-        return Err(Error::Msg("There is no html element with specified id!"));
+        return Err(anyhow::anyhow!("There is no html element with specified id!"));
     }
 }
 
 
-pub fn create_style_element(document : &Document, sheet : &str, id : &str) -> Expected<HtmlStyleElement> {
+pub fn create_style_element(document : &Document, sheet : &str, id : &str) -> anyhow::Result<HtmlStyleElement> {
     let style = create_html_element(&document, "style", id)?;
     let style = style.dyn_into::<HtmlStyleElement>()
-        .map_err(|_| Error::Msg("Failed to cast 'HtmlElement' to 'HtmlStyleElement'."))?;
+        .map_err(|_| anyhow::anyhow!("Failed to cast 'HtmlElement' to 'HtmlStyleElement'."))?;
     style.set_type("text/css");
     style.set_inner_html(sheet);
 
-    let head = document.head().ok_or(Error::Msg("Failed to get 'head' of the document."))?;
-    head.append_child(&style)?;
+    let head = document.head().ok_or(anyhow::anyhow!("Failed to get 'head' of the document."))?;
+    head.append_child(&style).to_anyhow()?;
 
     return Ok(style);
 }

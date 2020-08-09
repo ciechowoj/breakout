@@ -1,8 +1,10 @@
+use crate::utils::*;
 use web_sys::*;
 use wasm_bindgen::JsCast;
-use crate::utils::*;
 use crate::dom_utils::*;
 use serde::{Deserialize, Serialize};
+use crate::webapi::*;
+use apilib::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct PlayerScore {
@@ -30,7 +32,7 @@ impl PlayerScore {
 pub fn create_scoreboard(
     document : &Document,
     overlay : &HtmlElement,
-    new_score : u64) -> Expected<()> {
+    new_score : u64) -> anyhow::Result<()> {
     let scores = load_scores()?;
 
     fn make_row(score : &PlayerScore, editable : bool) -> String {
@@ -74,20 +76,20 @@ pub fn create_scoreboard(
 
     let score_board = create_html_element(&document, "div", "score-board")?;
     score_board.set_inner_html(scoreboard_str.as_str());
-    overlay.append_child(&score_board)?;
+    overlay.append_child(&score_board).to_anyhow()?;
 
     return Ok(());
 }
 
-pub fn player_name() -> Expected<Option<String>> {
-    let window = window().ok_or(Error::Msg("Failed to get window!"))?;
+pub fn player_name() -> anyhow::Result<Option<String>> {
+    let window = window().ok_or(anyhow::anyhow!("Failed to get window!"))?;
     let document = window.document().expect("Failed to get the main document!");
     
     let input_or_none = try_get_html_element_by_id(&document, "score-board-input")?;
 
     if let Some(input) = input_or_none {
         let input = input.dyn_into::<web_sys::HtmlInputElement>()
-            .map_err(|_| Error::Msg("Failed to cast 'HtmlElement' to 'HtmlInputElement'."))?;
+            .map_err(|_| anyhow::anyhow!("Failed to cast 'HtmlElement' to 'HtmlInputElement'."))?;
 
         let value = input.value();
 
@@ -99,10 +101,15 @@ pub fn player_name() -> Expected<Option<String>> {
     return Ok(None);
 }
 
-pub fn load_scores_from_local_storage() -> Expected<Option<Vec<PlayerScore>>> {
-    let window = window().ok_or(Error::Msg("Failed to get window!"))?;
-    let local_storage = window.local_storage()?.ok_or(Error::Msg("Failed to get local_storage!"))?;
-    let high_scores = local_storage.get_item("high-scores")?;
+pub fn load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScore>>> {
+    let window = window().ok_or(anyhow::anyhow!("Failed to get window!"))?;
+
+    let local_storage = window
+        .local_storage()
+        .to_anyhow()?
+        .ok_or(anyhow::anyhow!("Failed to get local_storage!"))?;
+
+    let high_scores = local_storage.get_item("high-scores").to_anyhow()?;
 
     return match high_scores {
         Some(string) => {
@@ -113,7 +120,7 @@ pub fn load_scores_from_local_storage() -> Expected<Option<Vec<PlayerScore>>> {
     };
 }
 
-pub fn load_scores() -> Expected<Vec<PlayerScore>> {
+pub fn load_scores() -> anyhow::Result<Vec<PlayerScore>> {
     let scores = load_scores_from_local_storage()?;
     let mut scores = match scores {
         Some(list) => list,
@@ -125,17 +132,22 @@ pub fn load_scores() -> Expected<Vec<PlayerScore>> {
     return Ok(scores);
 }
 
-pub fn save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> Expected<()> {
-    let window = window().ok_or(Error::Msg("Failed to get window!"))?;
-    let local_storage = window.local_storage()?.ok_or(Error::Msg("Failed to get local_storage!"))?;
+pub fn save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::Result<()> {
+    let window = window()
+        .ok_or(anyhow::anyhow!("Failed to get window!"))?;
+
+    let local_storage = window
+        .local_storage()
+        .to_anyhow()?
+        .ok_or(anyhow::anyhow!("Failed to get local_storage!"))?;
 
     let string = serde_json::to_string(&high_scores)?;
-    local_storage.set_item("high-scores", string.as_str())?;
+    local_storage.set_item("high-scores", string.as_str()).to_anyhow()?;
 
     return Ok(());
 }
 
-pub fn persist_score(name : String, new_score : u64) -> Expected<()> {
+pub async fn persist_score_inner(name : String, new_score : u64) -> anyhow::Result<()> {
     let mut scores = load_scores()?;
 
     let mut index : usize = scores.len();
@@ -153,9 +165,14 @@ pub fn persist_score(name : String, new_score : u64) -> Expected<()> {
     };
     
     scores.insert(index, player_score);
-    
+
+    list_scores_http(&ListScoresRequest { limit : Some(10) }).await?;
+
     save_scores_to_local_storage(scores)?;
 
     return Ok(());
 }
 
+pub async fn persist_score(name : String, new_score : u64) {
+    let _result = persist_score_inner(name, new_score).await;
+}

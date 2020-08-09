@@ -5,8 +5,8 @@ mod scoreboard;
 
 use glm::*;
 use crate::event::*;
-use crate::utils::*;
 use crate::collision::*;
+use crate::utils::*;
 use crate::dom_utils::*;
 use crate::game::bricks::*;
 use crate::game::utils::*;
@@ -33,9 +33,9 @@ pub fn draw_circle(
     rendering_context : &CanvasRenderingContext2d,
     origin : Vec2,
     radius : f32,
-    color : &'static str) -> Expected<()> {
+    color : &'static str) -> anyhow::Result<()> {
     rendering_context.begin_path();
-    rendering_context.arc(origin.x as f64, origin.y as f64, radius as f64, 0.0, two_pi())?;
+    rendering_context.arc(origin.x as f64, origin.y as f64, radius as f64, 0.0, two_pi()).to_anyhow()?;
     rendering_context.set_fill_style(&JsValue::from_str(color));
     rendering_context.fill();
     return Ok(());
@@ -46,7 +46,7 @@ pub fn draw_vector(
     rendering_context : &CanvasRenderingContext2d,
     origin : Vec2,
     target : Vec2,
-    color : &'static str) -> Expected<()> {
+    color : &'static str) -> anyhow::Result<()> {
     rendering_context.begin_path();
     rendering_context.set_line_width(2f64);
     rendering_context.move_to(origin.x as f64, origin.y as f64);
@@ -57,14 +57,14 @@ pub fn draw_vector(
 }
 
 trait Renderable {
-    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()>;
+    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()>;
 }
 
 trait Updateable<T> {
     fn update(
         &mut self,
         canvas_size : Vec2,
-        elapsed : GameTime) -> Expected<()>;
+        elapsed : GameTime) -> anyhow::Result<()>;
 }
 
 pub struct Bat { pub position : Vec2, pub velocity : Vec2, pub size : Vec2, pub input : Vec2 }
@@ -109,7 +109,7 @@ impl Ball {
 }
 
 impl Renderable for Bat {
-    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
+    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()> {
         let origin = self.position - self.size * 0.5;
         rendering_context.set_fill_style(&JsValue::from_str("black"));
         rendering_context.fill_rect(origin.x as f64, origin.y as f64, self.size.x as f64, self.size.y as f64);
@@ -118,7 +118,7 @@ impl Renderable for Bat {
 }
 
 impl Renderable for Ball {
-    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
+    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()> {
         let color = match self.freeze_time {
             Some(_) => "grey",
             None => if self.colliding { "red" } else { "black" }
@@ -130,7 +130,7 @@ impl Renderable for Ball {
 }
 
 impl Renderable for Brick {
-    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> Expected<()> {
+    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()> {
         let size = self.size * (1f32 - fmin(1f32, self.destruction_time.unwrap_or(0f32)));
 
         let origin = self.position - size * 0.5;
@@ -149,7 +149,7 @@ impl Updateable<Bat> for GameState {
     fn update(
         &mut self,
         canvas_size : Vec2,
-        game_time : GameTime) -> Expected<()> {
+        game_time : GameTime) -> anyhow::Result<()> {
 
         let bat = &mut self.bat;
         bat.position += mul(bat.input * game_time.elapsed, bat.velocity);
@@ -165,7 +165,7 @@ impl Updateable<Ball> for GameState {
     fn update(
         &mut self,
         canvas_size : Vec2,
-        game_time : GameTime) -> Expected<()> {
+        game_time : GameTime) -> anyhow::Result<()> {
         let elapsed = game_time.elapsed;
         let bat = &mut self.bat;
         let ball = &mut self.ball;
@@ -241,7 +241,7 @@ impl Updateable<Brick> for GameState {
     fn update(
         &mut self,
         _canvas_size : Vec2,
-        game_time : GameTime) -> Expected<()> {
+        game_time : GameTime) -> anyhow::Result<()> {
 
         self.bricks.update(game_time.elapsed)?;
 
@@ -276,13 +276,13 @@ impl GameState {
         bricks : Bricks,
         last_time : f64) -> GameState {
         GameState {
-            stage: GameStage::Gameplay,
+            stage: GameStage::ScoreBoard,
             bat: bat,
             ball: ball,
             bricks: bricks,
             last_time: last_time,
             time: GameTime { sim_time: 0f64, real_time: 0f64, elapsed: 0f32 },
-            score: 0,
+            score: 100,
             lives: 3,
             game_over_time: 0f64,
             keyboard_state: KeyboardState::new(),
@@ -316,18 +316,18 @@ pub fn init(
 pub fn init_overlay(
     _game_state : &mut GameState,
     overlay : &HtmlElement,
-    _time : f64) -> Expected<()> {
+    _time : f64) -> anyhow::Result<()> {
 
-    let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
+    let document = overlay.owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
     create_style_element(&document, include_str!("game.css"), "game-css")?;
 
     let score = create_html_element(&document, "span", "footer-score")?;
     score.set_inner_html("0");
-    overlay.append_child(&score)?;
+    overlay.append_child(&score).to_anyhow()?;
 
     let lives = create_html_element(&document, "span", "footer-lives")?;
     lives.set_inner_html("");
-    overlay.append_child(&lives)?;
+    overlay.append_child(&lives).to_anyhow()?;
 
     return Ok(());
 }
@@ -335,7 +335,7 @@ pub fn init_overlay(
 pub fn update_game_over(
     document : &Document,
     game_state : &mut GameState,
-    overlay : &HtmlElement) -> Expected<()> {
+    overlay : &HtmlElement) -> anyhow::Result<()> {
 
     let game_over_id = "game-over";
     let game_over = try_get_html_element_by_id(document, game_over_id)?;
@@ -345,7 +345,7 @@ pub fn update_game_over(
             match game_state.stage {
                 GameStage::GameOver => {},
                 _ => {
-                    overlay.remove_child(&element)?;
+                    overlay.remove_child(&element).to_anyhow()?;
                 }
             }
         },
@@ -354,7 +354,7 @@ pub fn update_game_over(
                 GameStage::GameOver => {
                     let game_over = create_html_element(&document, "div", game_over_id)?;
                     game_over.set_inner_html("<span>Game Over</span>");
-                    overlay.append_child(&game_over)?;
+                    overlay.append_child(&game_over).to_anyhow()?;
                 },
                 _ => {}
             }
@@ -367,7 +367,7 @@ pub fn update_game_over(
 pub fn update_score_board(
     document : &Document,
     game_state : &mut GameState,
-    overlay : &HtmlElement) -> Expected<()> {
+    overlay : &HtmlElement) -> anyhow::Result<()> {
     let score_board_id = "score-board";
     let score_board = try_get_html_element_by_id(document, score_board_id)?;
 
@@ -376,7 +376,7 @@ pub fn update_score_board(
             match game_state.stage {
                 GameStage::ScoreBoard => {},
                 _ => {
-                    overlay.remove_child(&element)?;
+                    overlay.remove_child(&element).to_anyhow()?;
                 }
             }
         },
@@ -396,9 +396,9 @@ pub fn update_score_board(
 pub fn update_overlay(
     game_state : &mut GameState,
     overlay : &HtmlElement,
-    _time : f64) -> Expected<()> {
+    _time : f64) -> anyhow::Result<()> {
 
-    let document = overlay.owner_document().ok_or(Error::Msg("Failed to get document node."))?;
+    let document = overlay.owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
     let score = get_html_element_by_id(&document, "footer-score")?;
     let lives = get_html_element_by_id(&document, "footer-lives")?;
@@ -406,16 +406,16 @@ pub fn update_overlay(
     match game_state.stage {
         GameStage::Gameplay | GameStage::GameOver => {
             let score_str = game_state.score.to_string();
-            score.style().remove_property("display")?;
+            score.style().remove_property("display").to_anyhow()?;
             score.set_inner_html(&score_str[..]);
 
             let lives_str =  "❤".repeat(game_state.lives as usize);
-            lives.style().remove_property("display")?;
+            lives.style().remove_property("display").to_anyhow()?;
             lives.set_inner_html(&lives_str[..]);
         },
         _ => {
-            score.style().set_property("display", "none")?;
-            lives.style().set_property("display", "none")?;
+            score.style().set_property("display", "none").to_anyhow()?;
+            lives.style().set_property("display", "none").to_anyhow()?;
         }
     };
 
@@ -430,7 +430,7 @@ pub fn update(
     input_events : &Vec<InputEvent>,
     event_queues : &EventQueues,
     canvas_size : Vec2,
-    time : f64) -> Expected<()> {
+    time : f64) -> anyhow::Result<()> {
 
     for event in input_events {
         match event {
@@ -448,7 +448,8 @@ pub fn update(
                         match game_state.stage {
                             GameStage::ScoreBoard => {
                                 if let Some(name) = player_name()? {
-                                    persist_score(name, game_state.score)?;
+                                    let future = persist_score(name, game_state.score);
+                                    wasm_bindgen_futures::spawn_local(future);
                                 }
 
                                 *game_state = init(canvas_size, time);
@@ -530,7 +531,7 @@ pub fn render(
     game_state : &GameState,
     rendering_context : &CanvasRenderingContext2d,
     canvas_size : Vec2,
-    _time : f64) -> Expected<()> {
+    _time : f64) -> anyhow::Result<()> {
     let width = canvas_size.x as f64;
     let height = canvas_size.y as f64;
 

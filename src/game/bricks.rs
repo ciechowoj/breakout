@@ -1,5 +1,4 @@
 use glm::*;
-use crate::utils::*;
 use crate::game::config;
 use std::iter::Iterator;
 
@@ -132,7 +131,7 @@ impl Bricks {
 
     pub fn update(
         &mut self,
-        elapsed : f32) -> Expected<()> {
+        elapsed : f32) -> anyhow::Result<()> {
 
         let mut should_fall = false;
         let mut should_reset = false;

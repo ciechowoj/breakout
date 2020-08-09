@@ -2,7 +2,6 @@ use anyhow::*;
 use http;
 use serde::de;
 use web_sys;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use apilib::*;
@@ -24,14 +23,14 @@ pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<String>) -> 
         .headers()
         .set("Accept", "application/json") {
         Ok(()) => Ok(()),
-        Err(js_value) => Err(anyhow!("Failed to add accept header!"))
+        Err(_js_value) => Err(anyhow!("Failed to add accept header!"))
     }?;
 
     let window = web_sys::window().unwrap();
 
     let response = match JsFuture::from(window.fetch_with_request(&request)).await {
         Ok(response) => Ok(response),
-        Err(js_value) => Err(anyhow!("Failed to execute request!")),
+        Err(_js_value) => Err(anyhow!("Failed to execute request!")),
     }?;
 
     assert!(response.is_instance_of::<web_sys::Response>());
@@ -39,13 +38,13 @@ pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<String>) -> 
 
     let json_response = match response.json() {
         Ok(response) => Ok(response),
-        Err(js_value) => Err(anyhow!("Failed to get json response!"))
+        Err(_js_value) => Err(anyhow!("Failed to get json response!"))
     }?;
 
     // Convert this other `Promise` into a rust `Future`.
     let json = match JsFuture::from(json_response).await {
         Ok(value) => Ok(value),
-        Err(js_error) => Err(anyhow!("Failed to await js_future!"))
+        Err(_js_error) => Err(anyhow!("Failed to await js_future!"))
     }?;
 
     // Use serde to parse the JSON into a struct.
@@ -58,7 +57,7 @@ pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<String>) -> 
     return Ok(response);
 }
 
-pub async fn new_session_id() -> anyhow::Result<http::Response<String>> {
+pub async fn _new_session_id() -> anyhow::Result<http::Response<String>> {
     let mut opts = web_sys::RequestInit::new();
     opts.method("GET");
     opts.mode(web_sys::RequestMode::Cors);
@@ -67,21 +66,21 @@ pub async fn new_session_id() -> anyhow::Result<http::Response<String>> {
 
     let request = match web_sys::Request::new_with_str_and_init(&url, &opts) {
         Ok(request) => Ok(request),
-        Err(js_value) => Err(anyhow!("Failed to create web_sys request!"))
+        Err(_js_value) => Err(anyhow!("Failed to create web_sys request!"))
     }?;
 
     match request
         .headers()
         .set("Accept", "application/json") {
         Ok(()) => Ok(()),
-        Err(js_value) => Err(anyhow!("Failed to add accept header!"))
+        Err(_js_value) => Err(anyhow!("Failed to add accept header!"))
     }?;
 
     let window = web_sys::window().unwrap();
 
     let response = match JsFuture::from(window.fetch_with_request(&request)).await {
         Ok(response) => Ok(response),
-        Err(js_value) => Err(anyhow!("Failed to execute request!")),
+        Err(_js_value) => Err(anyhow!("Failed to execute request!")),
     }?;
 
     assert!(response.is_instance_of::<web_sys::Response>());
@@ -89,13 +88,13 @@ pub async fn new_session_id() -> anyhow::Result<http::Response<String>> {
 
     let json_response = match response.json() {
         Ok(response) => Ok(response),
-        Err(js_value) => Err(anyhow!("Failed to get json response!"))
+        Err(_js_value) => Err(anyhow!("Failed to get json response!"))
     }?;
 
     // Convert this other `Promise` into a rust `Future`.
     let json = match JsFuture::from(json_response).await {
         Ok(value) => Ok(value),
-        Err(js_error) => Err(anyhow!("Failed to await js_future!"))
+        Err(_js_error) => Err(anyhow!("Failed to await js_future!"))
     }?;
 
     // Use serde to parse the JSON into a struct.
