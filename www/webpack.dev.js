@@ -9,7 +9,10 @@ module.exports = merge(common, {
     new WebpackSynchronizableShellPlugin(
       {
         onBuildStart: {
-          scripts: ['cargo build --manifest-path=../api/Cargo.toml'],
+          scripts: [
+            'cargo build --manifest-path=../api/Cargo.toml',
+            'wasm-pack build ../'
+          ],
           blocking: true,
           parallel: false
         },

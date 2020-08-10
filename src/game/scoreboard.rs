@@ -17,7 +17,13 @@ pub async fn create_scoreboard_inner(
             score.name.to_string()
         };
 
-        return format!("<tr><td class=\"player-name\">{}</td><td class=\"player-score\">{}</td></tr>", name, score.score);
+        return format!("<tr>\
+            <td class=\"player-name\">{}. {}</td>\
+            <td class=\"player-score\">{}</td>\
+            </tr>",
+            score.index + 1,
+            name, 
+            score.score);
     }
 
     let header_str = "<tr><th colspan=\"2\">High Scores</th></tr>";

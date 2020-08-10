@@ -62,6 +62,10 @@
     font-weight: 800;
 }
 
+.player-name input {
+    width: 80%;
+}
+
 .player-name {
     text-align: left;
 }
