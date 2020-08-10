@@ -2,45 +2,19 @@ use crate::utils::*;
 use web_sys::*;
 use wasm_bindgen::JsCast;
 use crate::dom_utils::*;
-use serde::{Deserialize, Serialize};
 use crate::webapi::*;
 use apilib::*;
 
-#[derive(Serialize, Deserialize)]
-pub struct PlayerScore {
-    pub player : String,
-    pub score : u64
-}
-
-impl PlayerScore {
-    pub fn test_scores() -> Vec<PlayerScore> {
-        return vec![
-            PlayerScore { player: "Maximilian".to_owned(), score: 65500 },
-            PlayerScore { player: "Wedrowycz".to_owned(), score: 32700 },
-            PlayerScore { player: "Super Saiyan".to_owned(), score: 16300 },
-            PlayerScore { player: "Portter".to_owned(), score: 8100 },
-            PlayerScore { player: "McPutin".to_owned(), score: 4000 },
-            PlayerScore { player: "Hayneman".to_owned(), score: 2000 },
-            PlayerScore { player: "Dolan Trump".to_owned(), score: 1000 },
-            PlayerScore { player: "Mumuzaki".to_owned(), score: 500 },
-            PlayerScore { player: "Erdargan".to_owned(), score: 2 },
-            PlayerScore { player: "J-Ducky".to_owned(), score: 1 }
-        ];
-    }
-}
-
-pub fn create_scoreboard(
-    document : &Document,
+pub async fn create_scoreboard_inner(
     overlay : &HtmlElement,
-    new_score : u64) -> anyhow::Result<()> {
-    let scores = load_scores()?;
-
+    new_score : i64) -> anyhow::Result<()> {
+    
     fn make_row(score : &PlayerScore, editable : bool) -> String {
         let name = if editable {
             "<input type=\"text\" id=\"score-board-input\" placeholder=\"<Your Nickname>\">".to_owned()
         }
         else {
-            score.player.to_string()
+            score.name.to_string()
         };
 
         return format!("<tr><td class=\"player-name\">{}</td><td class=\"player-score\">{}</td></tr>", name, score.score);
@@ -51,11 +25,13 @@ pub fn create_scoreboard(
     let mut scoreboard_str = "<table>".to_string();
     scoreboard_str.push_str(header_str);
 
+    let scores = load_scores().await?;
+
     let mut inserted = false;
     let mut num_inserted = 0;
     for score in scores {
         if !inserted && score.score < new_score {
-            scoreboard_str.push_str(make_row(&PlayerScore { player: "".to_owned(), score: new_score }, true).as_str());
+            scoreboard_str.push_str(make_row(&PlayerScore { index: num_inserted, name: "".to_owned(), score: new_score }, true).as_str());
             inserted = true;
 
             num_inserted += 1;
@@ -74,11 +50,21 @@ pub fn create_scoreboard(
 
     scoreboard_str.push_str("</table>");
 
+    let document = overlay
+        .owner_document()
+        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+
     let score_board = create_html_element(&document, "div", "score-board")?;
     score_board.set_inner_html(scoreboard_str.as_str());
     overlay.append_child(&score_board).to_anyhow()?;
 
     return Ok(());
+}
+
+pub async fn create_scoreboard(
+    overlay : HtmlElement,
+    new_score : i64) {
+    let _result = create_scoreboard_inner(&overlay, new_score).await;
 }
 
 pub fn player_name() -> anyhow::Result<Option<String>> {
@@ -101,7 +87,7 @@ pub fn player_name() -> anyhow::Result<Option<String>> {
     return Ok(None);
 }
 
-pub fn load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScore>>> {
+pub fn _load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScore>>> {
     let window = window().ok_or(anyhow::anyhow!("Failed to get window!"))?;
 
     let local_storage = window
@@ -120,12 +106,14 @@ pub fn load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScore
     };
 }
 
-pub fn load_scores() -> anyhow::Result<Vec<PlayerScore>> {
-    let scores = load_scores_from_local_storage()?;
-    let mut scores = match scores {
-        Some(list) => list,
-        None => PlayerScore::test_scores()
-    };
+pub async fn load_scores() -> anyhow::Result<Vec<PlayerScore>> {
+    let scores = list_scores_http(&ListScoresRequest { limit: Some(10) }).await?;
+    
+    if scores.status() != http::status::StatusCode::OK {
+        return Err(anyhow::anyhow!("Failed to list scores."));
+    }
+
+    let mut scores = scores.into_body();
 
     scores.sort_by(|a, b| b.score.cmp(&a.score));
 
@@ -147,8 +135,8 @@ pub fn save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::R
     return Ok(());
 }
 
-pub async fn persist_score_inner(name : String, new_score : u64) -> anyhow::Result<()> {
-    let mut scores = load_scores()?;
+pub async fn persist_score_inner(name : String, new_score : i64) -> anyhow::Result<()> {
+    let mut scores = load_scores().await?;
 
     let mut index : usize = scores.len();
     
@@ -160,19 +148,18 @@ pub async fn persist_score_inner(name : String, new_score : u64) -> anyhow::Resu
     }
 
     let player_score = PlayerScore { 
-        player: name,
+        index: index as i64,
+        name: name,
         score: new_score
     };
     
     scores.insert(index, player_score);
-
-    list_scores_http(&ListScoresRequest { limit : Some(10) }).await?;
 
     save_scores_to_local_storage(scores)?;
 
     return Ok(());
 }
 
-pub async fn persist_score(name : String, new_score : u64) {
+pub async fn persist_score(name : String, new_score : i64) {
     let _result = persist_score_inner(name, new_score).await;
 }

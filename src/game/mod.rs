@@ -262,7 +262,7 @@ pub struct GameState {
     pub bricks : Bricks,
     pub last_time : f64,
     pub time : GameTime,
-    pub score : u64,
+    pub score : i64,
     pub lives : u32,
     pub game_over_time : f64,
     pub keyboard_state : KeyboardState,
@@ -282,7 +282,7 @@ impl GameState {
             bricks: bricks,
             last_time: last_time,
             time: GameTime { sim_time: 0f64, real_time: 0f64, elapsed: 0f32 },
-            score: 100,
+            score: 4000,
             lives: 3,
             game_over_time: 0f64,
             keyboard_state: KeyboardState::new(),
@@ -333,12 +333,14 @@ pub fn init_overlay(
 }
 
 pub fn update_game_over(
-    document : &Document,
     game_state : &mut GameState,
     overlay : &HtmlElement) -> anyhow::Result<()> {
 
+    let document = overlay
+        .owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
+
     let game_over_id = "game-over";
-    let game_over = try_get_html_element_by_id(document, game_over_id)?;
+    let game_over = try_get_html_element_by_id(&document, game_over_id)?;
 
     match game_over {
         Some(element) => {
@@ -365,11 +367,15 @@ pub fn update_game_over(
 }
 
 pub fn update_score_board(
-    document : &Document,
     game_state : &mut GameState,
     overlay : &HtmlElement) -> anyhow::Result<()> {
+
+    let document = overlay
+        .owner_document()
+        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+
     let score_board_id = "score-board";
-    let score_board = try_get_html_element_by_id(document, score_board_id)?;
+    let score_board = try_get_html_element_by_id(&document, score_board_id)?;
 
     match score_board {
         Some(element) => {
@@ -383,7 +389,8 @@ pub fn update_score_board(
         None => {
             match game_state.stage {
                 GameStage::ScoreBoard => {
-                    create_scoreboard(&document, &overlay, game_state.score)?;
+                    let future = create_scoreboard(overlay.clone(), game_state.score);
+                    wasm_bindgen_futures::spawn_local(future);
                 },
                 _ => {}
             }
@@ -398,7 +405,9 @@ pub fn update_overlay(
     overlay : &HtmlElement,
     _time : f64) -> anyhow::Result<()> {
 
-    let document = overlay.owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
+    let document = overlay
+        .owner_document()
+        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
     let score = get_html_element_by_id(&document, "footer-score")?;
     let lives = get_html_element_by_id(&document, "footer-lives")?;
@@ -419,8 +428,8 @@ pub fn update_overlay(
         }
     };
 
-    update_game_over(&document, game_state, overlay)?;
-    update_score_board(&document, game_state, overlay)?;
+    update_game_over(game_state, overlay)?;
+    update_score_board(game_state, overlay)?;
 
     return Ok(());
 }
