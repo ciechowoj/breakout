@@ -219,9 +219,11 @@ async fn create_default_high_scores(client : &Client) -> anyhow::Result<()> {
         "INSERT INTO high_scores(id, name, score, created_time) VALUES ($1, $2, $3, $4);"
     ).await?;
 
-    client.execute(&statement, &[&Uuid::new_v4(), &"Alistair", &8000i64, &Utc::now()]).await?;
-    client.execute(&statement, &[&Uuid::new_v4(), &"Ferris", &4000i64, &Utc::now()]).await?;
-    client.execute(&statement, &[&Uuid::new_v4(), &"Gordon", &2000i64, &Utc::now()]).await?;
+    client.execute(&statement, &[&Uuid::new_v4(), &"Alistair", &16000i64, &Utc::now()]).await?;
+    client.execute(&statement, &[&Uuid::new_v4(), &"Ferris", &8000i64, &Utc::now()]).await?;
+    client.execute(&statement, &[&Uuid::new_v4(), &"Gordon", &4000i64, &Utc::now()]).await?;
+    client.execute(&statement, &[&Uuid::new_v4(), &"Henry", &2000i64, &Utc::now()]).await?;
+    client.execute(&statement, &[&Uuid::new_v4(), &"Voytech", &1000i64, &Utc::now()]).await?;
     client.execute(&statement, &[&Uuid::new_v4(), &"Voytech", &1000i64, &Utc::now()]).await?;
 
     return Ok(());
