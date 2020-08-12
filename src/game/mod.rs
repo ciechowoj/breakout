@@ -389,8 +389,7 @@ pub fn update_score_board(
         None => {
             match game_state.stage {
                 GameStage::ScoreBoard => {
-                    let future = create_scoreboard(overlay.clone(), game_state.score);
-                    wasm_bindgen_futures::spawn_local(future);
+                    create_scoreboard(overlay.clone(), game_state.score, score_board_id)?;
                 },
                 _ => {}
             }

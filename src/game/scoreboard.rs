@@ -7,7 +7,8 @@ use apilib::*;
 
 pub async fn create_scoreboard_inner(
     overlay : &HtmlElement,
-    new_score : i64) -> anyhow::Result<()> {
+    new_score : i64,
+    score_board_id : String) -> anyhow::Result<()> {
     
     fn make_row(score : &PlayerScore, editable : bool) -> String {
         let name = if editable {
@@ -60,17 +61,35 @@ pub async fn create_scoreboard_inner(
         .owner_document()
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
-    let score_board = create_html_element(&document, "div", "score-board")?;
+    let score_board = get_html_element_by_id(&document, score_board_id.as_ref())?;
     score_board.set_inner_html(scoreboard_str.as_str());
     overlay.append_child(&score_board).to_anyhow()?;
 
     return Ok(());
 }
 
-pub async fn create_scoreboard(
+pub async fn populate_scoreboard(
     overlay : HtmlElement,
-    new_score : i64) {
-    let _result = create_scoreboard_inner(&overlay, new_score).await;
+    new_score : i64,
+    score_board_id : String) {
+    let _result = create_scoreboard_inner(&overlay, new_score, score_board_id).await;
+}
+
+pub fn create_scoreboard(
+    overlay : HtmlElement,
+    new_score : i64,
+    score_board_id : &str) -> anyhow::Result<()> {
+    let document = overlay
+        .owner_document()
+        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+
+    let score_board = create_html_element(&document, "div", score_board_id)?;
+    overlay.append_child(&score_board).to_anyhow()?;
+
+    let future = populate_scoreboard(overlay.clone(), new_score, score_board_id.to_owned());
+    wasm_bindgen_futures::spawn_local(future);
+
+    return Ok(());
 }
 
 pub fn player_name() -> anyhow::Result<Option<String>> {
