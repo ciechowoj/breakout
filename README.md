@@ -13,7 +13,13 @@ Go to the webpage and play.
 
 ## How to build.
 
+### Required tools:
+The Rust toolchain `rustup`, `rustc`, `cargo`. A tool to generate WebAssembly: `wasm-pack`. A package manager for JavaScript `npm`.
+
+### Build commands:
 To run front-end: `npm run start` from the `www` directory.
-To build front-end: `npm run build` - prod, `npm run build-dev` - dev
-To build web assemble: `wasm-pack build`
+To build front-end: 
+ - for the first time: run `wasm-pack build`
+ - `npm run build` - prod, `npm run build-dev` - dev
+To build web assembly: `wasm-pack build`
 To build backend: `cargo build`

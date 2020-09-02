@@ -37,6 +37,7 @@
     systemctl reload apache2
 
     ## remove https rewrite rules from .htaccess
+    ## this is not needed as there is dev .htaccess file
     RewriteCond %{HTTPS} off
     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
@@ -50,3 +51,11 @@
 
 # See apache logs
     `tail -n 20 -f /var/log/apache2/error.log`
+
+# Configure postgre for serving on localhost
+sudo apt-get install postgresql
+sudo -u postgres createuser -ds wojciech
+psql -d template1
+\password
+CREATE DATABASE rusty_games;
+

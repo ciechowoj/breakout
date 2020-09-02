@@ -5,6 +5,7 @@
 **/target/.rustc_info.json
 **/*.rs.bk
 Cargo.lock
+CACHEDIR.TAG
 bin/
 pkg/
 wasm-pack.log
