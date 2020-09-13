@@ -51,11 +51,11 @@ pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<Option<Strin
     }?;
 
     // Use serde to parse the JSON into a struct.
-    let branch_info: T = json.into_serde().unwrap();
+    let response: T = json.into_serde().unwrap();
 
     let response = http::Response::builder()
         .status(http::StatusCode::OK)
-        .body(branch_info)?;
+        .body(response)?;
 
     return Ok(response);
 }
@@ -82,6 +82,55 @@ pub async fn new_session_id() -> anyhow::Result<String> {
 
     let result = response.into_body();
     return Ok(result);
+}
+
+pub async fn new_score_http(request : &NewScoreRequest) -> anyhow::Result<http::Response<NewScoreResponse>> {
+    let uri = "http://rusty-games.localhost/api/score/new";
+    let request = serde_json::to_string(&request)?;
+
+    let request = http::Request::builder()
+        .uri(uri)
+        .method("POST")
+        .body(Some(request))?;
+
+    let response : http::Response<NewScoreResponse> = fetch(request).await?;
+
+    return Ok(response);
+}
+
+pub async fn new_score(request : &NewScoreRequest) -> anyhow::Result<NewScoreResponse> {
+    let response = new_score_http(request).await?;
+    
+    if response.status() != http::status::StatusCode::OK {
+        return Err(anyhow::anyhow!("Failed to create a new score."));
+    }
+
+    let result = response.into_body();
+    return Ok(result);
+}
+
+async fn rename_score_http(request : &RenameScoreRequest) -> anyhow::Result<http::Response<()>> {
+    let uri = "http://rusty-games.localhost/api/score/rename";
+    let request = serde_json::to_string(&request)?;
+
+    let request = http::Request::builder()
+        .uri(uri)
+        .method("POST")
+        .body(Some(request))?;
+
+    let response : http::Response<()> = fetch(request).await?;
+
+    return Ok(response);
+}
+
+pub async fn rename_score(request : &RenameScoreRequest) -> anyhow::Result<()> {
+    let response = rename_score_http(request).await?;
+    
+    if response.status() != http::status::StatusCode::OK {
+        return Err(anyhow::anyhow!("Failed to rename a score."));
+    }
+
+    return Ok(());
 }
 
 pub async fn list_scores_http(request : &ListScoresRequest) -> anyhow::Result<http::Response<Vec<PlayerScore>>> {

@@ -277,19 +277,40 @@ async fn new_score_http(client : &Client, request : &Request<NewScoreRequest>) -
     }
 
     let rows = client
-        .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
+        .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC, created_time DESC), id, name, score 
                 FROM high_scores
-                ORDER BY score DESC
+                ORDER BY score DESC, created_time DESC
                 LIMIT $1;", &[&body.limit])
         .await?;
 
-    let scores : Vec<PlayerScore> = rows.iter()
-        .map(|row| PlayerScore { index: row.get::<&str, i64>("row_number") - 1, name: row.get("name"), score: row.get("score") })
-        .collect();
+    let mut scores = Vec::<PlayerScore>::new();
+    let mut index = -1i64;
+
+    for itr in rows.iter() {
+        let row_index = itr.get::<&str, i64>("row_number") - 1i64;
+
+        scores.push(PlayerScore { 
+            index: row_index,
+            name: itr.get("name"),
+            score: itr.get("score")
+        });
+
+        if itr.get::<&str, Uuid>("id") == id {
+            index = row_index
+        }
+    }
+
+    if index == -1i64 {
+        let response = Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(NewScoreResponse::Error("Cannot find the newly inserted score record!".to_owned()))?;
+
+        return Ok(response);
+    }
 
     let response = Response::builder()
         .status(StatusCode::OK)
-        .body(NewScoreResponse::Response { id: id, scores: scores })?;
+        .body(NewScoreResponse::Response { id: id, index: index, scores: scores })?;
 
     return Ok(response);
 }

@@ -3,7 +3,6 @@ use std::task::{Context, Poll, Waker, RawWaker, RawWakerVTable};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use crate::utils::*;
 
 use anyhow;
 use web_sys::*;
@@ -57,7 +56,7 @@ pub async fn execute_queue() {
         if let Some(queue) = &mut GLOBAL_TASK_QUEUE {
             let len = queue.len();
 
-            for i in 0..len {
+            for _ in 0..len {
                 if let Some(item) = queue.pop_back() {
                     item();
                 }

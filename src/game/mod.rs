@@ -282,7 +282,7 @@ impl GameState {
             bricks: bricks,
             last_time: last_time,
             time: GameTime { sim_time: 0f64, real_time: 0f64, elapsed: 0f32 },
-            score: 4000,
+            score: 4001,
             lives: 3,
             game_over_time: 0f64,
             keyboard_state: KeyboardState::new(),

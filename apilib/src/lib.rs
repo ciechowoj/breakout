@@ -38,7 +38,7 @@ pub struct NewScoreRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum NewScoreResponse {
-    Response { id : Uuid, scores : Vec<PlayerScore> },
+    Response { id : Uuid, index : i64, scores : Vec<PlayerScore> },
     Error(String)
 }
 

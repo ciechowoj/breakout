@@ -46,10 +46,10 @@ pub async fn proof_of_work_async(session_id : [u8; 32], seed : u64, degree : usi
     }
 }
 
-pub async fn create_scoreboard_inner_v2(
-    _overlay : &HtmlElement,
-    _new_score : i64,
-    _score_board_id : String) -> anyhow::Result<()> {
+pub async fn create_scoreboard_inner(
+    overlay : &HtmlElement,
+    new_score : i64,
+    score_board_id : String) -> anyhow::Result<()> {
 
     log!("Getting session id...");
 
@@ -60,61 +60,56 @@ pub async fn create_scoreboard_inner_v2(
     let mut decoded_session_id = [0u8; 32];
     hex::decode_to_slice(session_id.as_str(), &mut decoded_session_id)?;
 
-    let proof = proof_of_work_async(decoded_session_id, generate_seed()?, 16).await;
+    let proof = proof_of_work_async(decoded_session_id, generate_seed()?, 8).await;
     
     log!("proof of work: {:?}", hex::encode_upper(proof));
+
+    let response = crate::webapi::new_score(&NewScoreRequest {
+        score : new_score,
+        session_id : session_id,
+        proof_of_work : hex::encode_upper(proof),
+        limit : 10i64
+    }).await?;
+
+    log!("new score response: {:?}", response);
+
+    match response {
+        NewScoreResponse::Response { id: _, index, scores } =>
+            create_scoreboard_html(overlay, index, scores, score_board_id).await?,
+        NewScoreResponse::Error(_) =>
+            ()
+    };
 
     return Ok(());
 }
 
-pub async fn create_scoreboard_inner(
+pub async fn create_scoreboard_html(
     overlay : &HtmlElement,
-    new_score : i64,
+    index : i64,
+    scores : Vec<PlayerScore>,
     score_board_id : String) -> anyhow::Result<()> {
-    
-    fn make_row(score : &PlayerScore, editable : bool) -> String {
-        let name = if editable {
-            "<input type=\"text\" id=\"score-board-input\" placeholder=\"<Your Nickname>\">".to_owned()
-        }
-        else {
-            score.name.to_string()
-        };
-
-        return format!("<tr>\
-            <td class=\"player-name\">{}. {}</td>\
-            <td class=\"player-score\">{}</td>\
-            </tr>",
-            score.index + 1,
-            name, 
-            score.score);
-    }
-
     let header_str = "<tr><th colspan=\"2\">High Scores</th></tr>";
 
     let mut scoreboard_str = "<table>".to_string();
     scoreboard_str.push_str(header_str);
 
-    let scores = load_scores().await?;
-
-    let mut inserted = false;
-    let mut num_inserted = 0;
     for score in scores {
-        if !inserted && score.score < new_score {
-            scoreboard_str.push_str(make_row(&PlayerScore { index: num_inserted, name: "".to_owned(), score: new_score }, true).as_str());
-            inserted = true;
+        let name = if score.index == index {
+            "<input type=\"text\" id=\"score-board-input\" placeholder=\"<Your Nickname>\">".to_owned()
+        }
+        else {
+            score.name
+        };
 
-            num_inserted += 1;
-            if num_inserted == 10 {
-                break;
-            }
-        }
-        
-        scoreboard_str.push_str(make_row(&score, false).as_str());
-        
-        num_inserted += 1;
-        if num_inserted == 10 {
-            break;
-        }
+        let row = format!("<tr>\
+            <td class=\"player-name\">{}. {}</td>\
+            <td class=\"player-score\">{}</td>\
+            </tr>",
+            score.index + 1,
+            name,
+            score.score);
+
+        scoreboard_str.push_str(row.as_ref());
     }
 
     scoreboard_str.push_str("</table>");
@@ -135,14 +130,8 @@ pub async fn populate_scoreboard(
     new_score : i64,
     score_board_id : String) {
     let result1 = create_scoreboard_inner(&overlay, new_score, score_board_id.clone()).await;
-    let result2 = create_scoreboard_inner_v2(&overlay, new_score, score_board_id).await;
 
     match result1 {
-        Err(error) => log!("Failed to create scoreboard: {:?}", error),
-        Ok(_) => ()
-    }
-
-    match result2 {
         Err(error) => log!("Failed to create scoreboard: {:?}", error),
         Ok(_) => ()
     }
