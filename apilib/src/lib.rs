@@ -1,4 +1,5 @@
 use uuid::Uuid;
+use std::convert::TryInto;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use rand::prelude::*;
@@ -47,19 +48,19 @@ pub struct RenameScoreRequest {
     pub name: String
 }
 
-pub fn rand128() -> [u8; 16] {
+pub fn rand128<T : RngCore + CryptoRng>(rng : &mut T) -> [u8; 16] {
     let mut result = [0u8; 16];
-    rand::thread_rng().fill_bytes(&mut result);
+    rng.fill_bytes(&mut result);
     return result;
 }
 
-pub fn rand256() -> [u8; 32] {
+pub fn rand256<T : RngCore + CryptoRng>(rng : &mut T) -> [u8; 32] {
     let mut result = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut result);
+    rng.fill_bytes(&mut result);
     return result;
 }
 
-pub fn validate_proof_of_work(session_id : [u8; 32], proof_of_work : [u8; 32], degree : usize) -> bool {    
+pub fn validate_proof_of_work(session_id : [u8; 32], proof_of_work : [u8; 32], degree : usize) -> (bool, [u8; 32]) {    
     let sha256 = Sha256::new()
         .chain(session_id)
         .chain(proof_of_work)
@@ -67,26 +68,28 @@ pub fn validate_proof_of_work(session_id : [u8; 32], proof_of_work : [u8; 32], d
 
     let num_bytes = degree / 8;
     let num_bits = degree % 8;
-    let mask = 0u8 >> num_bits << num_bits;
+    let mask = !(0xffu8 << num_bits >> num_bits);
 
     for i in 0..num_bytes {
         if sha256[i] != 0 {
-            return false;
+            return (false, sha256.as_slice().try_into().expect("wrong size"));
         }
     }
 
     if sha256[num_bytes] & mask != 0 {
-        return false;
+        return (false, sha256.as_slice().try_into().expect("wrong size"));
     }
 
-    return true;
+    return (true, sha256.as_slice().try_into().expect("wrong size"));
 }
 
-pub fn proof_of_work(session_id : [u8; 32], degree : usize) -> [u8; 32] {
+pub fn proof_of_work(session_id : [u8; 32], seed : u64, degree : usize) -> [u8; 32] {
+    let mut rng = StdRng::seed_from_u64(seed);
+
     loop {
-        let test = rand256();
+        let test = rand256(&mut rng);
     
-        if validate_proof_of_work(session_id, test, degree) {
+        if validate_proof_of_work(session_id, test, degree).0 {
             return test;
         }
     }

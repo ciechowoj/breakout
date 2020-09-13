@@ -16,6 +16,7 @@ use http::{Request, Response, StatusCode};
 use http::header::*;
 use hex;
 use base64;
+use rand::prelude::*;
 
 // GET /api/score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
 // POST /api/score/add { "player": "Maxymilian TheBest", "score": 1000 }
@@ -157,7 +158,8 @@ async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest
 
 async fn new_session_id() -> anyhow::Result<Response<String>> {
     let session_id_salt = get_session_id_salt()?;
-    let nonce = rand128();
+    let mut rng = thread_rng();
+    let nonce = rand128(&mut rng);
 
     let sha256 = Sha256::new()
         .chain(session_id_salt)
@@ -246,7 +248,7 @@ async fn new_score_http(client : &Client, request : &Request<NewScoreRequest>) -
     let mut decoded_proof_of_work = [0u8; 32];
     hex::decode_to_slice(body.proof_of_work.as_str(), &mut decoded_proof_of_work)?;
 
-    if !validate_proof_of_work(decoded_session_id, decoded_proof_of_work, 8) {
+    if !validate_proof_of_work(decoded_session_id, decoded_proof_of_work, 8).0 {
         let response = Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(NewScoreResponse::Error("Invalid proof of work!".to_owned()))?;

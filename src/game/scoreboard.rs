@@ -3,7 +3,69 @@ use web_sys::*;
 use wasm_bindgen::JsCast;
 use crate::dom_utils::*;
 use crate::webapi::*;
+use crate::executor::*;
 use apilib::*;
+use hex;
+use rand::prelude::*;
+
+pub fn generate_seed() -> anyhow::Result<u64> {
+    let window = window().ok_or(anyhow::anyhow!("Failed to get window!"))?;
+
+    let crypto = match window.crypto() {
+        Ok(crypto) => Ok(crypto),
+        Err(js_value) => Err(anyhow::anyhow!("Failed to get windows crypto {:?}!", js_value))
+    }?;
+
+    let mut seed_bytes = [0u8; 8];
+
+    match crypto.get_random_values_with_u8_array(&mut seed_bytes) {
+        Ok(_) => Ok(()),
+        Err(js_value) => Err(anyhow::anyhow!("Failed to get an array of random values, inner error: {:?}!", js_value))
+    }?;
+
+    return Ok(u64::from_le_bytes(seed_bytes));
+}
+
+pub async fn proof_of_work_async(session_id : [u8; 32], seed : u64, degree : usize) -> [u8; 32] {
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    loop {
+        let test = rand256(&mut rng);
+
+        let witness = async {
+            validate_proof_of_work(session_id, test, degree)
+        };
+
+        yield_now().await;
+
+        let witness = witness.await;
+
+        if witness.0 {
+            return test;
+        }
+    }
+}
+
+pub async fn create_scoreboard_inner_v2(
+    _overlay : &HtmlElement,
+    _new_score : i64,
+    _score_board_id : String) -> anyhow::Result<()> {
+
+    log!("Getting session id...");
+
+    let session_id = new_session_id().await?;
+
+    log!("session id: {:?}", session_id);
+
+    let mut decoded_session_id = [0u8; 32];
+    hex::decode_to_slice(session_id.as_str(), &mut decoded_session_id)?;
+
+    let proof = proof_of_work_async(decoded_session_id, generate_seed()?, 16).await;
+    
+    log!("proof of work: {:?}", hex::encode_upper(proof));
+
+    return Ok(());
+}
 
 pub async fn create_scoreboard_inner(
     overlay : &HtmlElement,
@@ -72,7 +134,18 @@ pub async fn populate_scoreboard(
     overlay : HtmlElement,
     new_score : i64,
     score_board_id : String) {
-    let _result = create_scoreboard_inner(&overlay, new_score, score_board_id).await;
+    let result1 = create_scoreboard_inner(&overlay, new_score, score_board_id.clone()).await;
+    let result2 = create_scoreboard_inner_v2(&overlay, new_score, score_board_id).await;
+
+    match result1 {
+        Err(error) => log!("Failed to create scoreboard: {:?}", error),
+        Ok(_) => ()
+    }
+
+    match result2 {
+        Err(error) => log!("Failed to create scoreboard: {:?}", error),
+        Ok(_) => ()
+    }
 }
 
 pub fn create_scoreboard(
@@ -87,7 +160,8 @@ pub fn create_scoreboard(
     overlay.append_child(&score_board).to_anyhow()?;
 
     let future = populate_scoreboard(overlay.clone(), new_score, score_board_id.to_owned());
-    wasm_bindgen_futures::spawn_local(future);
+
+    execute(future);
 
     return Ok(());
 }

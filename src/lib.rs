@@ -6,6 +6,7 @@ mod dom_utils;
 mod game;
 mod collision;
 mod webapi;
+mod executor;
 
 use std::any::Any;
 use std::cell::RefCell;
