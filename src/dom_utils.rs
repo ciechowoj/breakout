@@ -2,6 +2,14 @@ use crate::utils::*;
 use web_sys::*;
 use wasm_bindgen::JsCast;
 
+pub fn into_html_element(element : Element) -> HtmlElement {
+    let element = element
+        .dyn_into::<HtmlElement>()
+        .expect("Failed to cast 'Element' to 'HtmlElement'.");
+    
+    return element;
+}
+
 pub fn create_html_element(document : &Document, tag : &str, id : &str) -> anyhow::Result<HtmlElement> {
     let element = document.create_element(tag).to_anyhow()?;
     let element = element.dyn_into::<HtmlElement>()
@@ -33,7 +41,6 @@ pub fn get_html_element_by_id(document : &Document, id : &str) -> anyhow::Result
         return Err(anyhow::anyhow!("There is no html element with specified id!"));
     }
 }
-
 
 pub fn create_style_element(document : &Document, sheet : &str, id : &str) -> anyhow::Result<HtmlStyleElement> {
     let style = create_html_element(&document, "style", id)?;

@@ -7,6 +7,8 @@ use crate::executor::*;
 use apilib::*;
 use hex;
 use rand::prelude::*;
+use std::{rc::Rc, cell::RefCell};
+use uuid::Uuid;
 
 pub fn generate_seed() -> anyhow::Result<u64> {
     let window = window().ok_or(anyhow::anyhow!("Failed to get window!"))?;
@@ -49,6 +51,7 @@ pub async fn proof_of_work_async(session_id : [u8; 32], seed : u64, degree : usi
 pub async fn create_scoreboard_inner(
     overlay : &HtmlElement,
     new_score : i64,
+    score_id : Rc<RefCell<Uuid>>,
     score_board_id : String) -> anyhow::Result<()> {
 
     log!("Getting session id...");
@@ -74,8 +77,10 @@ pub async fn create_scoreboard_inner(
     log!("new score response: {:?}", response);
 
     match response {
-        NewScoreResponse::Response { id: _, index, scores } =>
-            create_scoreboard_html(overlay, index, scores, score_board_id).await?,
+        NewScoreResponse::Response { id, index, scores } => {
+            create_scoreboard_html(overlay, index, scores, score_board_id).await?;
+            *score_id.borrow_mut() = id;
+        },
         NewScoreResponse::Error(_) =>
             ()
     };
@@ -125,11 +130,37 @@ pub async fn create_scoreboard_html(
     return Ok(());
 }
 
+pub fn collapse_scoreboard_input_html(overlay : &HtmlElement) -> anyhow::Result<()> {
+    let document = overlay
+        .owner_document()
+        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+
+    let scoreboard_input = get_html_element_by_id(&document, "score-board-input")?;
+    let parent = scoreboard_input.parent_element();
+
+    match parent {
+        Some(parent) => {
+            let parent = into_html_element(parent);
+
+            let inner = parent.inner_html();
+
+            let index = inner.split('.').next().unwrap();
+            let name = player_name()?.unwrap();
+
+            parent.set_inner_html(format!("{}. {}", index, name).as_str());
+        },
+        None => {} 
+    }
+
+    return Ok(());
+}
+
 pub async fn populate_scoreboard(
     overlay : HtmlElement,
     new_score : i64,
+    score_id : Rc<RefCell<Uuid>>,
     score_board_id : String) {
-    let result1 = create_scoreboard_inner(&overlay, new_score, score_board_id.clone()).await;
+    let result1 = create_scoreboard_inner(&overlay, new_score, score_id, score_board_id.clone()).await;
 
     match result1 {
         Err(error) => log!("Failed to create scoreboard: {:?}", error),
@@ -140,6 +171,7 @@ pub async fn populate_scoreboard(
 pub fn create_scoreboard(
     overlay : HtmlElement,
     new_score : i64,
+    score_id : Rc<RefCell<Uuid>>,
     score_board_id : &str) -> anyhow::Result<()> {
     let document = overlay
         .owner_document()
@@ -148,7 +180,7 @@ pub fn create_scoreboard(
     let score_board = create_html_element(&document, "div", score_board_id)?;
     overlay.append_child(&score_board).to_anyhow()?;
 
-    let future = populate_scoreboard(overlay.clone(), new_score, score_board_id.to_owned());
+    let future = populate_scoreboard(overlay.clone(), new_score, score_id, score_board_id.to_owned());
 
     execute(future);
 
@@ -194,8 +226,8 @@ pub fn _load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScor
     };
 }
 
-pub async fn load_scores() -> anyhow::Result<Vec<PlayerScore>> {
-    let scores = list_scores_http(&ListScoresRequest { limit: Some(10) }).await?;
+pub async fn _load_scores() -> anyhow::Result<Vec<PlayerScore>> {
+    let scores = _list_scores_http(&ListScoresRequest { limit: Some(10) }).await?;
     
     if scores.status() != http::status::StatusCode::OK {
         return Err(anyhow::anyhow!("Failed to list scores."));
@@ -208,7 +240,7 @@ pub async fn load_scores() -> anyhow::Result<Vec<PlayerScore>> {
     return Ok(scores);
 }
 
-pub fn save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::Result<()> {
+pub fn _save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::Result<()> {
     let window = window()
         .ok_or(anyhow::anyhow!("Failed to get window!"))?;
 
@@ -223,31 +255,22 @@ pub fn save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::R
     return Ok(());
 }
 
-pub async fn persist_score_inner(name : String, new_score : i64) -> anyhow::Result<()> {
-    let mut scores = load_scores().await?;
-
-    let mut index : usize = scores.len();
-    
-    for i in 0..scores.len() {
-        if scores[i].score < new_score {
-            index = i;
-            break;
-        }
-    }
-
-    let player_score = PlayerScore { 
-        index: index as i64,
-        name: name,
-        score: new_score
-    };
-    
-    scores.insert(index, player_score);
-
-    save_scores_to_local_storage(scores)?;
+pub async fn persist_score_inner(name : String, score_id : Uuid) -> anyhow::Result<()> {
+    crate::webapi::rename_score(&RenameScoreRequest {
+        id: score_id,
+        name: name 
+    }).await?;
 
     return Ok(());
 }
 
-pub async fn persist_score(name : String, new_score : i64) {
-    let _result = persist_score_inner(name, new_score).await;
+pub async fn persist_score_async(overlay : HtmlElement, name : String, score_id : Uuid) {
+    let _result = persist_score_inner(name, score_id).await;
+    let _result = collapse_scoreboard_input_html(&overlay);
+}
+
+pub fn persist_score(overlay : HtmlElement, name : String, score_id : Uuid) -> anyhow::Result<()> {
+    let future = persist_score_async(overlay, name, score_id);
+    execute(future);
+    return Ok(());
 }

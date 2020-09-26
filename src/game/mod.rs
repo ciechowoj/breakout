@@ -13,6 +13,8 @@ use crate::game::utils::*;
 use crate::game::scoreboard::*;
 use std::cmp::{max};
 use std::include_str;
+use std::rc::Rc;
+use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use web_sys::*;
 use js_sys::Math::random;
@@ -263,6 +265,7 @@ pub struct GameState {
     pub last_time : f64,
     pub time : GameTime,
     pub score : i64,
+    pub score_id : Rc<RefCell<uuid::Uuid>>,
     pub lives : u32,
     pub game_over_time : f64,
     pub keyboard_state : KeyboardState,
@@ -276,14 +279,15 @@ impl GameState {
         bricks : Bricks,
         last_time : f64) -> GameState {
         GameState {
-            stage: GameStage::ScoreBoard,
+            stage: GameStage::Gameplay,
             bat: bat,
             ball: ball,
             bricks: bricks,
             last_time: last_time,
             time: GameTime { sim_time: 0f64, real_time: 0f64, elapsed: 0f32 },
             score: 4001,
-            lives: 3,
+            score_id: Rc::new(RefCell::new(uuid::Uuid::nil())),
+            lives: 1,
             game_over_time: 0f64,
             keyboard_state: KeyboardState::new(),
             touch_tracker: TouchTracker::new()
@@ -389,7 +393,7 @@ pub fn update_score_board(
         None => {
             match game_state.stage {
                 GameStage::ScoreBoard => {
-                    create_scoreboard(overlay.clone(), game_state.score, score_board_id)?;
+                    create_scoreboard(overlay.clone(), game_state.score, game_state.score_id.clone(), score_board_id)?;
                 },
                 _ => {}
             }
@@ -435,6 +439,7 @@ pub fn update_overlay(
 
 pub fn update(
     game_state : &mut GameState,
+    overlay : &HtmlElement,
     input_events : &Vec<InputEvent>,
     event_queues : &EventQueues,
     canvas_size : Vec2,
@@ -456,8 +461,7 @@ pub fn update(
                         match game_state.stage {
                             GameStage::ScoreBoard => {
                                 if let Some(name) = player_name()? {
-                                    let future = persist_score(name, game_state.score);
-                                    wasm_bindgen_futures::spawn_local(future);
+                                    persist_score(overlay.clone(), name, *game_state.score_id.borrow())?;
                                 }
 
                                 *game_state = init(canvas_size, time);

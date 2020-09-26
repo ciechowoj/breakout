@@ -133,7 +133,7 @@ pub async fn rename_score(request : &RenameScoreRequest) -> anyhow::Result<()> {
     return Ok(());
 }
 
-pub async fn list_scores_http(request : &ListScoresRequest) -> anyhow::Result<http::Response<Vec<PlayerScore>>> {
+pub async fn _list_scores_http(request : &ListScoresRequest) -> anyhow::Result<http::Response<Vec<PlayerScore>>> {
     let uri = "http://rusty-games.localhost/api/score/list";
     let request = serde_json::to_string(&request)?;
 

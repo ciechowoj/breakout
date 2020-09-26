@@ -39,4 +39,6 @@
     ✓ Buy domain
     ✓ Buy hosting
 
-
+- Refactoring
+    - Consolidate usages of dyn_into::<HtlmElement>
+    - Do not ignore errors, especialy from functions executed on executor.
