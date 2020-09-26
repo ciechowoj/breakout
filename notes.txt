@@ -13,7 +13,7 @@
     ## Create new site
     cd /etc/apache2/sites-available/
     sudo cp 000-default.conf 001-rusty-games.conf
-    code 001-rusty-games.conf 
+    code 001-rusty-games.conf
 
     ## This is new content
     ServerName rusty-games.localhost
@@ -29,7 +29,7 @@
     </Directory>
 
     ## ensite and reload apache
-    sudo a2ensite 001-rusty-games.conf 
+    sudo a2ensite 001-rusty-games.conf
     systemctl reload apache2
 
     ## add '127.0.0.1   rusty-games.localhost' to /etc/hosts
@@ -58,4 +58,14 @@ sudo -u postgres createuser -ds wojciech
 psql -d template1
 \password
 CREATE DATABASE rusty_games;
+\q
 
+# Condifure postgre to run unit tests
+sudo -u postgres createuser testuser
+psql -d template1
+ALTER USER testuser WITH PASSWORD 'password';
+ALTER USER testuser CREATEDB;
+SET ROLE testuser;
+CREATE DATABASE testdb;
+\du
+\q

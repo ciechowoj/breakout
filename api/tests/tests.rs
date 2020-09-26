@@ -157,9 +157,9 @@ fn issue_api_request_with_authz<T: serde::de::DeserializeOwned>(
 
 async fn with_database(
     database: &'static str,
-    callback: &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>>) 
+    callback: &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>>)
     -> Result<(), Box<dyn std::error::Error>> {
-    let connection_string = "host=localhost user=wojciech dbname=wojciech password=password";
+    let connection_string = "host=localhost user=testuser dbname=testdb password=password";
 
     let (client, connection) =
         tokio_postgres::connect(connection_string.as_ref(), NoTls).await?;
@@ -233,7 +233,7 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
         let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Second Player", "score": 4 }"#)?;
         let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Third Player", "score": 3 }"#)?;
         let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 2 }"#)?;
-        
+
         let actual : Response<Vec<PlayerScore>> = issue_api_request("simple_test", "POST", "/api/score/list", r#"{}"#)?;
 
         let expected = r#"[
@@ -294,7 +294,7 @@ async fn test_init_checks_admin_password() -> Result<(), Box<dyn std::error::Err
 #[tokio::test]
 async fn test_init_creates_default_scores() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-        
+
         return Ok(());
     };
 
@@ -307,14 +307,14 @@ async fn test_init_creates_default_scores() -> Result<(), Box<dyn std::error::Er
 async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api")?;
-        
+
         let session_id : Response<String> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
-        
+
         let mut decoded_session_id = [0u8; 32];
         hex::decode_to_slice(session_id.body(), &mut decoded_session_id)?;
-        let proof_of_work = proof_of_work(decoded_session_id, 8);
+        let proof_of_work = proof_of_work(decoded_session_id, 42u64, 8);
 
         let request = NewScoreRequest {
             score: 85i64,
@@ -330,7 +330,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
             "POST",
             "/api/score/new",
             request_json.as_str())?;
-        
+
         let expected = r#"[
             { "index": 0, "name": "First Player", "score": 100 },
             { "index": 1, "name": "Second Player", "score": 90 },
@@ -341,13 +341,13 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(StatusCode::OK, actual.status());
 
         let id = match actual.body() {
-            NewScoreResponse::Response { id, scores} => {
+            NewScoreResponse::Response { id, index: _, scores } => {
                 assert_json_eq(expected, serde_json::to_string(&scores)?.as_str());
                 Ok(id)
             },
             NewScoreResponse::Error(error) => Err(anyhow!("{}", error))
         }?;
-        
+
         let actual : Response<()> = issue_api_request(
             "test_new_rename_api",
             "POST",
@@ -386,11 +386,11 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_new_rename_api_invalid_session_id() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api_invalid_session_id")?;
-        
+
         let session_id : Response<String> = issue_api_request("test_new_rename_api_invalid_session_id", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
-        
+
         let session_id_amended = session_id.body()
             .char_indices()
             .map(|(i, c)| if i == 0 { if c == '0' { '1' } else { '0' } } else { c })
@@ -410,7 +410,7 @@ async fn test_new_rename_api_invalid_session_id() -> Result<(), Box<dyn std::err
             "POST",
             "/api/score/new",
             request_json.as_str())?;
-        
+
         assert_eq!(StatusCode::BAD_REQUEST, actual.status());
 
         return Ok(());
@@ -425,14 +425,14 @@ async fn test_new_rename_api_invalid_session_id() -> Result<(), Box<dyn std::err
 async fn test_new_rename_api_session_id_cannot_be_reused() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api_session_id_cannot_be_reused")?;
-        
+
         let session_id : Response<String> = issue_api_request("test_new_rename_api_session_id_cannot_be_reused", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
-        
+
         let mut decoded_session_id = [0u8; 32];
         hex::decode_to_slice(session_id.body(), &mut decoded_session_id)?;
-        let proof_of_work = proof_of_work(decoded_session_id, 8);
+        let proof_of_work = proof_of_work(decoded_session_id, 42u64, 8);
 
         let request = NewScoreRequest {
             score: 85i64,
@@ -448,7 +448,7 @@ async fn test_new_rename_api_session_id_cannot_be_reused() -> Result<(), Box<dyn
             "POST",
             "/api/score/new",
             request_json.as_str())?;
-        
+
         assert_eq!(StatusCode::OK, actual.status());
 
         let actual : Response<NewScoreResponse> = issue_api_request(
@@ -456,7 +456,7 @@ async fn test_new_rename_api_session_id_cannot_be_reused() -> Result<(), Box<dyn
             "POST",
             "/api/score/new",
             request_json.as_str())?;
-        
+
         assert_eq!(StatusCode::BAD_REQUEST, actual.status());
 
         return Ok(());
@@ -471,7 +471,7 @@ async fn test_new_rename_api_session_id_cannot_be_reused() -> Result<(), Box<dyn
 async fn test_new_rename_api_invalid_proof_of_work() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api_invalid_proof_of_work")?;
-        
+
         let session_id : Response<String> = issue_api_request("test_new_rename_api_invalid_proof_of_work", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
@@ -490,7 +490,7 @@ async fn test_new_rename_api_invalid_proof_of_work() -> Result<(), Box<dyn std::
             "POST",
             "/api/score/new",
             request_json.as_str())?;
-        
+
         assert_eq!(StatusCode::BAD_REQUEST, actual.status());
 
         return Ok(());
