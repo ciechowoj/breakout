@@ -1,6 +1,16 @@
 # Disable pager in psql:
     \pset pager off
 
+# Execute script from file in psql:
+    psql -U username -d myDataBase -a -f myInsertFile
+    \i path_to_sql_file
+
+# Drop all overloads of stored function:
+    SELECT 'DROP FUNCTION ' || oid::regprocedure
+    FROM   pg_proc
+    WHERE  proname = 'select_adjacent_scores'
+    AND    pg_function_is_visible(oid);
+
 # Run cargo with stacktrace and io:
     RUST_BACKTRACE=1 cargo test -- --nocapture
     To install apache to serve localhost:

@@ -5,8 +5,14 @@ use std::env;
 use std::str;
 use std::io::{self, Write};
 use tokio_postgres::{Client, NoTls};
+use tokio::sync::Semaphore;
 use http::{Response, StatusCode};
+use lazy_static::lazy_static;
 use apilib::*;
+
+lazy_static! {
+    static ref TEST_SEMAPHORE : Semaphore = Semaphore::new(1);
+}
 
 #[cfg(debug_assertions)]
 fn debug_or_release() -> &'static str {
@@ -159,6 +165,9 @@ async fn with_database(
     database: &'static str,
     callback: &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>>)
     -> Result<(), Box<dyn std::error::Error>> {
+
+    let _guard = TEST_SEMAPHORE.acquire().await;
+
     let connection_string = "host=localhost user=testuser dbname=testdb password=password";
 
     let (client, connection) =
@@ -182,6 +191,23 @@ async fn with_database(
 
     client
         .execute(format!("CREATE DATABASE {};", database).as_str(), &[])
+        .await?;
+
+    let connection_string = format!("host=localhost user=testuser dbname={} password=password", database);
+
+    let (client, connection) =
+        tokio_postgres::connect(connection_string.as_ref(), NoTls).await?;
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
+
+    let sql = include_str!("../src/main.sql");
+
+    client
+        .batch_execute(sql)
         .await?;
 
     callback(&client)?;
@@ -378,6 +404,59 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     with_database("test_new_rename_api", body).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_new_rename_api_return_records_from_the_middle() -> Result<(), Box<dyn std::error::Error>> {
+    let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
+        fill_with_test_data("test_new_rename_api_return_records_from_the_middle")?;
+
+        let session_id : Response<String> = issue_api_request("test_new_rename_api_return_records_from_the_middle", "GET", "/api/session-id/new", r#""#)?;
+
+        assert_eq!(StatusCode::OK, session_id.status());
+
+        let mut decoded_session_id = [0u8; 32];
+        hex::decode_to_slice(session_id.body(), &mut decoded_session_id)?;
+        let proof_of_work = proof_of_work(decoded_session_id, 42u64, 8);
+
+        let request = NewScoreRequest {
+            score: 55i64,
+            session_id: session_id.body().clone(),
+            proof_of_work: hex::encode_upper(proof_of_work),
+            limit: 4i64
+        };
+
+        let request_json = serde_json::to_string(&request)?;
+
+        let actual : Response<NewScoreResponse> = issue_api_request(
+            "test_new_rename_api_return_records_from_the_middle",
+            "POST",
+            "/api/score/new",
+            request_json.as_str())?;
+
+        let expected = r#"[
+            { "index": 3, "name": "Fourth Player", "score": 70 },
+            { "index": 4, "name": "Fifth Player", "score": 60 },
+            { "index": 5, "name": "", "score": 55 },
+            { "index": 6, "name": "Sixth Player", "score": 50 }
+        ]"#;
+
+        assert_eq!(StatusCode::OK, actual.status());
+
+        let id = match actual.body() {
+            NewScoreResponse::Response { id, index: _, scores } => {
+                assert_json_eq(expected, serde_json::to_string(&scores)?.as_str());
+                Ok(id)
+            },
+            NewScoreResponse::Error(error) => Err(anyhow!("{}", error))
+        }?;
+
+        return Ok(());
+    };
+
+    with_database("test_new_rename_api_return_records_from_the_middle", body).await?;
 
     Ok(())
 }

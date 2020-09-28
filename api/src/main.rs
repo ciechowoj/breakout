@@ -66,7 +66,7 @@ fn get_request() -> anyhow::Result<Request<String>> {
 
     let request = builder
         .body(content)?;
-        
+
     return Ok(request);
 }
 
@@ -110,7 +110,7 @@ async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest
 
     let result = if let Some(limit) = body.limit {
         client
-            .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
+            .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score
                     FROM high_scores
                     ORDER BY score DESC
                     LIMIT $1;", &[&limit])
@@ -118,7 +118,7 @@ async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest
     }
     else {
         client
-            .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score 
+            .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score
                     FROM high_scores
                     ORDER BY score DESC;", &[])
             .await
@@ -131,18 +131,18 @@ async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest
                     Ok(Vec::<PlayerScore>::new())
                 }
                 else {
-                    Err(error)    
+                    Err(error)
                 }
             }
             else {
                 Err(error)
-            }            
+            }
         },
         Ok(rows) => {
             let scores = rows.iter()
-                .map(|row| PlayerScore { 
-                    index: row.get::<&str, i64>("row_number") - 1, 
-                    name: row.get("name"), score: row.get("score") 
+                .map(|row| PlayerScore {
+                    index: row.get::<&str, i64>("row_number") - 1,
+                    name: row.get("name"), score: row.get("score")
                 })
                 .collect();
             Ok(scores)
@@ -182,9 +182,9 @@ async fn new_session_id() -> anyhow::Result<Response<String>> {
 
 fn validate_session_id(session_id : [u8; 32]) -> anyhow::Result<bool> {
     let session_id_salt = get_session_id_salt()?;
-    
+
     let mut nonce = [0u8; 16];
-    
+
     for i in 0..16 {
         nonce[i] = session_id[i];
     }
@@ -198,7 +198,7 @@ fn validate_session_id(session_id : [u8; 32]) -> anyhow::Result<bool> {
         if sha256[i] != session_id[i + 16] {
             return Ok(false);
         }
-    }   
+    }
 
     return Ok(true);
 }
@@ -260,9 +260,11 @@ async fn new_score_http(client : &Client, request : &Request<NewScoreRequest>) -
 
     let id = Uuid::from_slice(&decoded_session_id[16..])?;
 
+    let utc_now = Utc::now();
+
     let result = client.execute(
         "INSERT INTO high_scores(id, name, score, created_time)
-         VALUES ($1, $2, $3, $4);", &[&id, &"", &body.score, &Utc::now()]).await;
+         VALUES ($1, $2, $3, $4);", &[&id, &"", &body.score, &utc_now]).await;
 
     if let Err(error) = result {
         if let Some(code) = error.code() {
@@ -277,19 +279,16 @@ async fn new_score_http(client : &Client, request : &Request<NewScoreRequest>) -
     }
 
     let rows = client
-        .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC, created_time DESC), id, name, score 
-                FROM high_scores
-                ORDER BY score DESC, created_time DESC
-                LIMIT $1;", &[&body.limit])
+        .query("SELECT * FROM select_adjacent_scores($1, $2);", &[&id, &body.limit])
         .await?;
 
     let mut scores = Vec::<PlayerScore>::new();
     let mut index = -1i64;
 
     for itr in rows.iter() {
-        let row_index = itr.get::<&str, i64>("row_number") - 1i64;
+        let row_index = itr.get::<&str, i64>("index") - 1i64;
 
-        scores.push(PlayerScore { 
+        scores.push(PlayerScore {
             index: row_index,
             name: itr.get("name"),
             score: itr.get("score")
@@ -389,7 +388,7 @@ async fn authenticate(request : &Request<()>) -> anyhow::Result<Response<()>> {
                 .chain(password_bytes)
                 .chain(admin_salt_bytes)
                 .finalize();
-    
+
             let hash = hex::encode_upper(sha256);
 
             if hash != admin_hash {
@@ -417,6 +416,12 @@ async fn initialize(client : &Client, request : &Request<()>) -> anyhow::Result<
     }
 
     create_default_high_scores(client).await?;
+
+    let sql = include_str!("main.sql");
+
+    client
+        .batch_execute(sql)
+        .await?;
 
     let response = Response::builder()
         .status(StatusCode::OK)
@@ -499,7 +504,7 @@ async fn inner_main() -> Result<(), anyhow::Error> {
             eprintln!("connection error: {}", e);
         }
     });
-    
+
     match (request.method().as_str(), request.uri().path()) {
         ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await?)?,
         ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await?)?,
