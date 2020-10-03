@@ -2,11 +2,15 @@ use crate::utils::*;
 use web_sys::*;
 use wasm_bindgen::JsCast;
 
+pub fn window() -> Window {
+    return web_sys::window().expect("Failed to retrieve the reference to the global window.");
+}
+
 pub fn into_html_element(element : Element) -> HtmlElement {
     let element = element
         .dyn_into::<HtmlElement>()
         .expect("Failed to cast 'Element' to 'HtmlElement'.");
-    
+
     return element;
 }
 
@@ -22,7 +26,7 @@ pub fn try_get_html_element_by_id(document : &Document, id : &str) -> anyhow::Re
     if let Some(element) = document.get_element_by_id(id) {
         let element = element.dyn_into::<web_sys::HtmlElement>()
             .map_err(|_| anyhow::anyhow!("Failed to cast 'Element' to 'HtmlElement'."))?;
-    
+
         return Ok(Some(element));
     }
     else {
@@ -34,7 +38,7 @@ pub fn get_html_element_by_id(document : &Document, id : &str) -> anyhow::Result
     if let Some(element) = document.get_element_by_id(id) {
         let element = element.dyn_into::<web_sys::HtmlElement>()
             .map_err(|_| anyhow::anyhow!("Failed to cast 'Element' to 'HtmlElement'."))?;
-    
+
         return Ok(element);
     }
     else {
@@ -54,3 +58,4 @@ pub fn create_style_element(document : &Document, sheet : &str, id : &str) -> an
 
     return Ok(style);
 }
+

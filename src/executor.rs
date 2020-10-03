@@ -4,7 +4,6 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
-use anyhow;
 use web_sys::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -32,7 +31,7 @@ unsafe fn wake(ptr : WakerData) {
 
 unsafe fn wake_by_ref(ptr : WakerData) {
     let flags : Rc<RefCell<WakerDataImpl>> = Rc::from_raw(ptr as *const RefCell<WakerDataImpl>);
-    flags.borrow_mut().awoken_flag = true;    
+    flags.borrow_mut().awoken_flag = true;
 
     if !flags.borrow().polling_flag {
         respawn();
@@ -66,9 +65,7 @@ pub async fn execute_queue() {
 }
 
 pub fn respawn() {
-    let window = window()
-        .ok_or(anyhow::anyhow!("Failed to get window!"))
-        .unwrap();
+    let window = window().expect("Failed to retrieve the reference to the global window.");
 
     let closure = Closure::once_into_js(move || {
         wasm_bindgen_futures::spawn_local(execute_queue());
@@ -101,7 +98,7 @@ where
             Poll::Pending => {
                 if flags.borrow().awoken_flag && counter < 128 {
                     flags.borrow_mut().awoken_flag = false;
-                    counter += 1;   
+                    counter += 1;
                 }
                 else {
                     break;

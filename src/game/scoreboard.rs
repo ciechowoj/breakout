@@ -1,7 +1,7 @@
 use crate::utils::*;
 use web_sys::*;
 use wasm_bindgen::JsCast;
-use crate::dom_utils::*;
+use crate::dom_utils as browser;
 use crate::webapi::*;
 use crate::executor::*;
 use apilib::*;
@@ -11,7 +11,7 @@ use std::{rc::Rc, cell::RefCell};
 use uuid::Uuid;
 
 pub fn generate_seed() -> anyhow::Result<u64> {
-    let window = window().ok_or(anyhow::anyhow!("Failed to get window!"))?;
+    let window = browser::window();
 
     let crypto = match window.crypto() {
         Ok(crypto) => Ok(crypto),
@@ -64,7 +64,7 @@ pub async fn create_scoreboard_inner(
     hex::decode_to_slice(session_id.as_str(), &mut decoded_session_id)?;
 
     let proof = proof_of_work_async(decoded_session_id, generate_seed()?, 8).await;
-    
+
     log!("proof of work: {:?}", hex::encode_upper(proof));
 
     let response = crate::webapi::new_score(&NewScoreRequest {
@@ -123,7 +123,7 @@ pub async fn create_scoreboard_html(
         .owner_document()
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
-    let score_board = get_html_element_by_id(&document, score_board_id.as_ref())?;
+    let score_board = browser::get_html_element_by_id(&document, score_board_id.as_ref())?;
     score_board.set_inner_html(scoreboard_str.as_str());
     overlay.append_child(&score_board).to_anyhow()?;
 
@@ -135,12 +135,12 @@ pub fn collapse_scoreboard_input_html(overlay : &HtmlElement) -> anyhow::Result<
         .owner_document()
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
-    let scoreboard_input = get_html_element_by_id(&document, "score-board-input")?;
+    let scoreboard_input = browser::get_html_element_by_id(&document, "score-board-input")?;
     let parent = scoreboard_input.parent_element();
 
     match parent {
         Some(parent) => {
-            let parent = into_html_element(parent);
+            let parent = browser::into_html_element(parent);
 
             let inner = parent.inner_html();
 
@@ -149,7 +149,7 @@ pub fn collapse_scoreboard_input_html(overlay : &HtmlElement) -> anyhow::Result<
 
             parent.set_inner_html(format!("{}. {}", index, name).as_str());
         },
-        None => {} 
+        None => {}
     }
 
     return Ok(());
@@ -177,7 +177,7 @@ pub fn create_scoreboard(
         .owner_document()
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
-    let score_board = create_html_element(&document, "div", score_board_id)?;
+    let score_board = browser::create_html_element(&document, "div", score_board_id)?;
     overlay.append_child(&score_board).to_anyhow()?;
 
     let future = populate_scoreboard(overlay.clone(), new_score, score_id, score_board_id.to_owned());
@@ -188,10 +188,10 @@ pub fn create_scoreboard(
 }
 
 pub fn player_name() -> anyhow::Result<Option<String>> {
-    let window = window().ok_or(anyhow::anyhow!("Failed to get window!"))?;
+    let window = browser::window();
     let document = window.document().expect("Failed to get the main document!");
-    
-    let input_or_none = try_get_html_element_by_id(&document, "score-board-input")?;
+
+    let input_or_none = browser::try_get_html_element_by_id(&document, "score-board-input")?;
 
     if let Some(input) = input_or_none {
         let input = input.dyn_into::<web_sys::HtmlInputElement>()
@@ -208,7 +208,7 @@ pub fn player_name() -> anyhow::Result<Option<String>> {
 }
 
 pub fn _load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScore>>> {
-    let window = window().ok_or(anyhow::anyhow!("Failed to get window!"))?;
+    let window = browser::window();
 
     let local_storage = window
         .local_storage()
@@ -228,7 +228,7 @@ pub fn _load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScor
 
 pub async fn _load_scores() -> anyhow::Result<Vec<PlayerScore>> {
     let scores = _list_scores_http(&ListScoresRequest { limit: Some(10) }).await?;
-    
+
     if scores.status() != http::status::StatusCode::OK {
         return Err(anyhow::anyhow!("Failed to list scores."));
     }
@@ -241,8 +241,7 @@ pub async fn _load_scores() -> anyhow::Result<Vec<PlayerScore>> {
 }
 
 pub fn _save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::Result<()> {
-    let window = window()
-        .ok_or(anyhow::anyhow!("Failed to get window!"))?;
+    let window = browser::window();
 
     let local_storage = window
         .local_storage()
@@ -258,7 +257,7 @@ pub fn _save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::
 pub async fn persist_score_inner(name : String, score_id : Uuid) -> anyhow::Result<()> {
     crate::webapi::rename_score(&RenameScoreRequest {
         id: score_id,
-        name: name 
+        name: name
     }).await?;
 
     return Ok(());

@@ -5,6 +5,7 @@ use web_sys;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use apilib::*;
+use crate::dom_utils as browser;
 
 pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<Option<String>>) -> anyhow::Result<http::Response<T>> {
     let mut opts = web_sys::RequestInit::new();
@@ -29,7 +30,7 @@ pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<Option<Strin
         Err(_js_value) => Err(anyhow!("Failed to add accept header!"))
     }?;
 
-    let window = web_sys::window().unwrap();
+    let window = browser::window();
 
     let response = match JsFuture::from(window.fetch_with_request(&request)).await {
         Ok(response) => Ok(response),
@@ -75,7 +76,7 @@ pub async fn new_session_id_http() -> anyhow::Result<http::Response<String>> {
 
 pub async fn new_session_id() -> anyhow::Result<String> {
     let response = new_session_id_http().await?;
-    
+
     if response.status() != http::status::StatusCode::OK {
         return Err(anyhow::anyhow!("Failed to get a new session id."));
     }
@@ -100,7 +101,7 @@ pub async fn new_score_http(request : &NewScoreRequest) -> anyhow::Result<http::
 
 pub async fn new_score(request : &NewScoreRequest) -> anyhow::Result<NewScoreResponse> {
     let response = new_score_http(request).await?;
-    
+
     if response.status() != http::status::StatusCode::OK {
         return Err(anyhow::anyhow!("Failed to create a new score."));
     }
@@ -125,7 +126,7 @@ async fn rename_score_http(request : &RenameScoreRequest) -> anyhow::Result<http
 
 pub async fn rename_score(request : &RenameScoreRequest) -> anyhow::Result<()> {
     let response = rename_score_http(request).await?;
-    
+
     if response.status() != http::status::StatusCode::OK {
         return Err(anyhow::anyhow!("Failed to rename a score."));
     }

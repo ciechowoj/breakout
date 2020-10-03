@@ -19,7 +19,7 @@ use web_sys::*;
 use event::*;
 use utils::*;
 use game::*;
-use crate::dom_utils::*;
+use crate::dom_utils as browser;
 use glm::vec2;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -85,9 +85,9 @@ pub async fn wasm_main() {
         };
 
         fn js_to_keydown_event(js_value : JsValue) -> anyhow::Result<InputEvent> {
-            let event = InputEvent::KeyDown { 
+            let event = InputEvent::KeyDown {
                 code: get_code(js_value)?
-            }; 
+            };
 
             return Ok(event);
         }
@@ -107,39 +107,39 @@ pub async fn wasm_main() {
             let offset_y = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetY")).to_anyhow()?;
             let offset_y = offset_y.as_f64().ok_or(anyhow::anyhow!("Expected 'offsetY' field in MouseEvent!"))?;
 
-            let event = InputEvent::MouseMove { 
+            let event = InputEvent::MouseMove {
                 x: offset_x,
                 y: offset_y
             };
 
             return Ok(event);
         }
-    
-        let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
+
+        let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             let event = js_to_keydown_event(js_value).unwrap();
             input_events.borrow_mut().push(event);
         });
-        
+
         let closure = Closure::wrap(on_keydown as Box<dyn FnMut(JsValue)>);
         document.set_onkeydown(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
 
         let update_struct_clone = update_struct.clone();
-        let on_keyup : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
+        let on_keyup : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             let event = js_to_keyup_event(js_value).unwrap();
             update_struct_clone.events.borrow_mut().push(event);
         });
-        
+
         let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
         document.set_onkeyup(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
 
         let update_struct_clone = update_struct.clone();
-        let on_mousemove : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {            
+        let on_mousemove : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             let event = js_to_mousemove_event(js_value).unwrap();
             update_struct_clone.events.borrow_mut().push(event);
         });
-        
+
         let closure = Closure::wrap(on_mousemove as Box<dyn FnMut(JsValue)>);
         canvas.set_onmousemove(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
@@ -187,11 +187,11 @@ pub async fn wasm_main() {
         canvas : &HtmlCanvasElement,
         overlay : HtmlElement,
         window : Window) -> anyhow::Result<()> {
-    
+
         let performance = window.performance().expect("performance should be available");
 
         let canvas_clone = canvas.clone();
-    
+
         let update = move |update: Rc<Recursive>| {
             let rendering_context = canvas_clone
                 .get_context("2d")
@@ -199,7 +199,7 @@ pub async fn wasm_main() {
                 .unwrap()
                 .dyn_into::<web_sys::CanvasRenderingContext2d>()
                 .unwrap();
-        
+
             let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
                 if let Some(_) = js_value.as_f64() {
                     let time = now_sec(&update.performance);
@@ -216,7 +216,7 @@ pub async fn wasm_main() {
                     update.events.borrow_mut().clear();
 
                     let elapsed = now_sec(&update.performance) - time;
-                    
+
                     crate::update_fps(
                         &mut update.last_time.borrow_mut(),
                         &update.overlay,
@@ -224,21 +224,21 @@ pub async fn wasm_main() {
                         time).unwrap();
 
                 }
-    
+
                 let update_clone = update.clone();
-    
+
                 (update.value)(update_clone);
             });
-    
+
             let closure = Closure::once_into_js(inner as Box<dyn FnMut(JsValue)>);
-        
+
             window.request_animation_frame(closure.as_ref().unchecked_ref())
                 .unwrap();
         };
-    
+
         let update_clone = Rc::new(update);
-    
-        let update_struct = Rc::new(Recursive { 
+
+        let update_struct = Rc::new(Recursive {
             value: update_clone.clone(),
             context: RefCell::new(Box::new(())),
             events: Rc::new(RefCell::new(Vec::new())),
@@ -247,14 +247,14 @@ pub async fn wasm_main() {
             overlay: overlay.clone(),
             last_time: RefCell::new(0f64)
         });
-    
+
         bind_event_handlers(
             &document,
             &canvas,
             &overlay,
             update_struct.events.clone(),
             update_struct.clone());
-    
+
         EventQueues::bind_all_queues(Rc::downgrade(&update_struct.event_queues), &overlay);
 
         update_clone(update_struct);
@@ -264,16 +264,16 @@ pub async fn wasm_main() {
 
     set_panic_hook();
 
-    let window = web_sys::window().expect("no global `window` exists");
-    
+    let window = browser::window();
+
     let document = window.document().expect("should have a document on window");
     document.set_title("Omg! It works!");
 
-    create_style_element(&document, include_str!("main.css"), "main-css")
+    browser::create_style_element(&document, include_str!("main.css"), "main-css")
         .expect("Failed to create main.css.");
 
     let body = document.body().expect("document should have a body");
-    
+
     let outer_div = document.create_element("div").unwrap();
     let outer_div = outer_div.dyn_into::<web_sys::HtmlElement>()
         .map_err(|_| ())
@@ -289,16 +289,16 @@ pub async fn wasm_main() {
 
     canvas.set_class_name("main-canvas-area");
     reset_canvas_size(&canvas).unwrap();
-    
+
     outer_div.append_child(&canvas).ok();
-    
+
     let overlay = document.create_element("div").unwrap();
     let overlay = overlay.dyn_into::<web_sys::HtmlElement>()
         .map_err(|_| ())
         .unwrap();
     overlay.set_class_name("main-canvas-area");
     outer_div.append_child(&overlay).ok();
-        
+
     setup_main_loop(&document, &canvas, overlay, window).unwrap();
 }
 
@@ -309,7 +309,7 @@ pub fn update(
     rendering_context : &CanvasRenderingContext2d,
     overlay : &HtmlElement,
     time : f64) -> anyhow::Result<()> {
-    
+
     let canvas = rendering_context.canvas()
         .ok_or(anyhow::anyhow!("Failed to get canvas from rendering context."))?;
 
@@ -360,7 +360,7 @@ pub fn update_fps(
             .unwrap();
 
         fps_counter.set_id("fps-counter");
-        overlay.append_child(&fps_counter).ok();       
+        overlay.append_child(&fps_counter).ok();
     }
 
     if let Some(fps_counter) = document.get_element_by_id("fps-counter") {
