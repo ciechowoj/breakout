@@ -275,17 +275,14 @@ pub async fn wasm_main() {
     let body = document.body().expect("document should have a body");
 
     let outer_div = document.create_element("div").unwrap();
-    let outer_div = outer_div.dyn_into::<web_sys::HtmlElement>()
-        .map_err(|_| ())
-        .unwrap();
+    let outer_div = browser::into_html_element(outer_div);
 
     outer_div.set_id("outer-div");
     body.append_child(&outer_div).ok();
 
     let canvas = document.create_element("canvas").unwrap();
     let canvas = canvas.dyn_into::<web_sys::HtmlCanvasElement>()
-        .map_err(|_| ())
-        .unwrap();
+        .expect("Failed to cast 'Element' to 'HtmlCanvasElement'.");
 
     canvas.set_class_name("main-canvas-area");
     reset_canvas_size(&canvas).unwrap();
@@ -293,9 +290,7 @@ pub async fn wasm_main() {
     outer_div.append_child(&canvas).ok();
 
     let overlay = document.create_element("div").unwrap();
-    let overlay = overlay.dyn_into::<web_sys::HtmlElement>()
-        .map_err(|_| ())
-        .unwrap();
+    let overlay = browser::into_html_element(overlay);
     overlay.set_class_name("main-canvas-area");
     outer_div.append_child(&overlay).ok();
 
@@ -355,9 +350,7 @@ pub fn update_fps(
 
     if let None = document.get_element_by_id("fps-counter") {
         let fps_counter = document.create_element("span").unwrap();
-        let fps_counter = fps_counter.dyn_into::<web_sys::HtmlElement>()
-            .map_err(|_| ())
-            .unwrap();
+        let fps_counter = browser::into_html_element(fps_counter);
 
         fps_counter.set_id("fps-counter");
         overlay.append_child(&fps_counter).ok();

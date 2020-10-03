@@ -16,17 +16,14 @@ pub fn into_html_element(element : Element) -> HtmlElement {
 
 pub fn create_html_element(document : &Document, tag : &str, id : &str) -> anyhow::Result<HtmlElement> {
     let element = document.create_element(tag).to_anyhow()?;
-    let element = element.dyn_into::<HtmlElement>()
-        .map_err(|_| anyhow::anyhow!("Failed to cast 'Element' to 'HtmlElement'."))?;
+    let element = into_html_element(element);
     element.set_id(id);
     return Ok(element);
 }
 
 pub fn try_get_html_element_by_id(document : &Document, id : &str) -> anyhow::Result<Option<HtmlElement>> {
     if let Some(element) = document.get_element_by_id(id) {
-        let element = element.dyn_into::<web_sys::HtmlElement>()
-            .map_err(|_| anyhow::anyhow!("Failed to cast 'Element' to 'HtmlElement'."))?;
-
+        let element = into_html_element(element);
         return Ok(Some(element));
     }
     else {
@@ -36,8 +33,7 @@ pub fn try_get_html_element_by_id(document : &Document, id : &str) -> anyhow::Re
 
 pub fn get_html_element_by_id(document : &Document, id : &str) -> anyhow::Result<HtmlElement> {
     if let Some(element) = document.get_element_by_id(id) {
-        let element = element.dyn_into::<web_sys::HtmlElement>()
-            .map_err(|_| anyhow::anyhow!("Failed to cast 'Element' to 'HtmlElement'."))?;
+        let element = into_html_element(element);
 
         return Ok(element);
     }
@@ -50,6 +46,7 @@ pub fn create_style_element(document : &Document, sheet : &str, id : &str) -> an
     let style = create_html_element(&document, "style", id)?;
     let style = style.dyn_into::<HtmlStyleElement>()
         .map_err(|_| anyhow::anyhow!("Failed to cast 'HtmlElement' to 'HtmlStyleElement'."))?;
+
     style.set_type("text/css");
     style.set_inner_html(sheet);
 

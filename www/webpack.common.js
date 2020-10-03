@@ -13,10 +13,14 @@ module.exports = {
         {
           from: 'index.html',
           force: true
+        },
+        {
+          from: 'favicon.ico',
+          force: true
         }
     ]})
   ],
   performance: {
     hints: false
-  }        
+  }
 };
