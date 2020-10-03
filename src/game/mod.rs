@@ -1,3 +1,5 @@
+mod bat;
+mod ball;
 mod bricks;
 mod config;
 mod utils;
@@ -5,10 +7,11 @@ mod scoreboard;
 
 use glm::*;
 use crate::event::*;
-use crate::collision::*;
 use crate::utils::*;
 use crate::dom_utils::*;
 use crate::game::bricks::*;
+use crate::game::bat::*;
+use crate::game::ball::*;
 use crate::game::utils::*;
 use crate::game::scoreboard::*;
 use std::cmp::{max};
@@ -17,19 +20,6 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use web_sys::*;
-use js_sys::Math::random;
-
-pub fn fmin(a: f32, b: f32) -> f32 { if a < b { a } else { b } }
-pub fn fmax(a: f32, b: f32) -> f32 { if a < b { b } else { a } }
-
-pub fn mul(a: Vec2, b: Vec2) -> Vec2 {
-    vec2(a.x * b.x, a.y * b.y)
-}
-
-pub fn reflect(v: Vec2, n: Vec2) -> Vec2 {
-    let v_dot_n = dot(&v, &n);
-    if v_dot_n < 0.0 { v - 2f32 * v_dot_n * n } else { v }
-}
 
 pub fn draw_circle(
     rendering_context : &CanvasRenderingContext2d,
@@ -60,54 +50,6 @@ pub fn draw_vector(
 
 trait Renderable {
     fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()>;
-}
-
-trait Updateable<T> {
-    fn update(
-        &mut self,
-        canvas_size : Vec2,
-        elapsed : GameTime) -> anyhow::Result<()>;
-}
-
-pub struct Bat { pub position : Vec2, pub velocity : Vec2, pub size : Vec2, pub input : Vec2 }
-
-pub struct Ball {
-    pub position : Vec2,
-    pub velocity : Vec2,
-    pub size : f32,
-    pub colliding : bool,
-    pub freeze_time : Option<f32>
-}
-
-impl Ball {
-    pub fn new(canvas_size : Vec2) -> Ball {
-        let mut ball = Ball {
-            position: vec2(0f32, 0f32),
-            velocity: vec2(0f32, 0f32),
-            size: config::BALL_START_SIZE,
-            colliding: false,
-            freeze_time: None
-        };
-
-        ball.reset_position(canvas_size);
-
-        return ball;
-    }
-
-    pub fn reset_position(&mut self, canvas_size : Vec2) {
-        let ball_start_position = vec2(config::BALL_START_X, config::BALL_START_Y);
-        let ball_start_angle = config::BALL_START_ANGLE * (random() as f32 - 0.5f32);
-        let ball_start_direction = rotate_vec2(&vec2(0f32, -1f32), ball_start_angle);
-
-        self.position = mul(ball_start_position, canvas_size);
-        self.velocity = ball_start_direction * config::BALL_VELOCITY;
-
-        self.freeze_time = Some(0f32);
-    }
-
-    pub fn effective_velocity(&self) -> Vec2 {
-        return self.velocity * match self.freeze_time { Some(_) => 0f32, None => 1f32 };
-    }
 }
 
 impl Renderable for Bat {
@@ -147,107 +89,17 @@ impl Renderable for Brick {
     }
 }
 
-impl Updateable<Bat> for GameState {
-    fn update(
-        &mut self,
-        canvas_size : Vec2,
-        game_time : GameTime) -> anyhow::Result<()> {
+fn decrease_lives(game_state : &mut GameState, canvas_size : Vec2, game_time : GameTime) {
+    let ball : &mut Ball = &mut game_state.ball;
 
-        let bat = &mut self.bat;
-        bat.position += mul(bat.input * game_time.elapsed, bat.velocity);
+    game_state.lives = max(game_state.lives, 1) - 1;
 
-        bat.position.x -= fmin(bat.position.x - bat.size.x * 0.5, 0f32);
-        bat.position.x -= fmax(bat.position.x + bat.size.x * 0.5 - canvas_size.x, 0f32);
-
-        return Ok(());
+    if game_state.lives != 0 {
+        ball.reset_position(canvas_size);
     }
-}
-
-impl Updateable<Ball> for GameState {
-    fn update(
-        &mut self,
-        canvas_size : Vec2,
-        game_time : GameTime) -> anyhow::Result<()> {
-        let elapsed = game_time.elapsed;
-        let bat = &mut self.bat;
-        let ball = &mut self.ball;
-        let new_position = ball.position + ball.effective_velocity() * elapsed;
-        let mut outer_collision : Option<Collision> = None;
-
-        ball.freeze_time = match ball.freeze_time {
-            Some(time) => if time > config::BALL_FREEZE_TIME { None } else { Some(time + elapsed) },
-            None => None
-        };
-
-        for brick in &mut self.bricks.bricks {
-            if let None = brick.destruction_time {
-                if let Some(collision) = resolve_circle_aabb_collision(
-                    ball.position,
-                    new_position, 
-                    ball.size,
-                    brick.position,
-                    brick.size * 0.5) {
-                    outer_collision = Some(collision);
-                    brick.destruction_time = Some(0f32);
-                    self.score += 1;
-                }
-            }
-        }
-
-        if let Some(collision) = resolve_circle_aabb_collision(
-            ball.position,
-            new_position, 
-            ball.size,
-            bat.position,
-            bat.size * 0.5) {
-            outer_collision = Some(collision);
-        }
-
-        if let Some(collision) = resolve_circle_aabb_inv_collision(
-            ball.position,
-            new_position, 
-            ball.size,
-            canvas_size * 0.5,
-            canvas_size * 0.5) {
-            if collision.normal != vec2(0f32, -1f32) {
-                outer_collision = Some(collision);
-            }
-        }
-
-        if let Some(collision) = outer_collision {
-            let reflected = reflect(ball.velocity, collision.normal);
-            ball.position = ball.position + ball.velocity * elapsed * collision.t + reflected * elapsed * (1.0 - collision.t);
-            ball.velocity = reflected;
-        }
-        else {
-            ball.position = new_position;
-        }
-
-        if ball.position.y - ball.size > canvas_size.y {
-            self.lives = max(self.lives, 1) - 1;
-
-            if self.lives != 0 {
-                ball.reset_position(canvas_size);
-            }
-            else {
-                self.stage = GameStage::GameOver;
-                self.game_over_time = game_time.real_time;
-            }
-        }
-
-        return Ok(());
-    }
-}
-
-impl Updateable<Brick> for GameState {
-    fn update(
-        &mut self,
-        _canvas_size : Vec2,
-        game_time : GameTime) -> anyhow::Result<()> {
-
-        self.bricks.update(game_time.elapsed)?;
-
-        return Ok(());
+    else {
+        game_state.stage = GameStage::GameOver;
+        game_state.game_over_time = game_time.real_time;
     }
 }
 
@@ -299,15 +151,7 @@ pub fn init(
     canvas_size : Vec2,
     time : f64) -> GameState {
 
-    let bat_position = vec2(canvas_size.x * 0.5, canvas_size.y - 100.0);
-
-    let bat = Bat { 
-        position: bat_position,
-        velocity: vec2(1000.0, 1000.0),
-        size: vec2(200.0, 20.0),
-        input: vec2(0.0, 0.0)
-    };
-
+    let bat = Bat::new(canvas_size);
     let mut ball = Ball::new(canvas_size);
 
     ball.reset_position(canvas_size);
@@ -457,7 +301,7 @@ pub fn update(
             InputEvent::KeyUp { code } => {
                 match code {
                     KeyCode::Space => { game_state.bricks.reset_last_row() }
-                    KeyCode::Enter => {   
+                    KeyCode::Enter => {
                         match game_state.stage {
                             GameStage::ScoreBoard => {
                                 if let Some(name) = player_name()? {
@@ -512,15 +356,22 @@ pub fn update(
     let epsilon = 0.01f64;
     let mut current = game_state.last_time;
     game_state.time.real_time = time;
-    
+
     while epsilon < time - current {
         game_state.time.sim_time += epsilon as f64;
         game_state.time.elapsed = epsilon as f32;
 
         match game_state.stage {
             GameStage::Gameplay => {
-                Updateable::<Ball>::update(game_state, canvas_size, game_state.time)?;
-                Updateable::<Bat>::update(game_state, canvas_size, game_state.time)?;
+                let ball_status = update_ball(&game_state.bat, &mut game_state.ball, &mut game_state.bricks, canvas_size, game_state.time.elapsed)?;
+
+                game_state.score += ball_status.brick_hit_count as i64;
+
+                if ball_status.out_of_arena {
+                    decrease_lives(game_state, canvas_size, game_state.time);
+                }
+
+                update_bat(&mut game_state.bat, canvas_size, game_state.time.elapsed)?;
             },
             GameStage::GameOver => {
                 if game_state.time.real_time - game_state.game_over_time > config::GAME_OVER_PAUSE_TIME {
@@ -529,8 +380,8 @@ pub fn update(
             }
             _ => {}
         };
-        
-        Updateable::<Brick>::update(game_state, canvas_size, game_state.time)?;
+
+        game_state.bricks.update(game_state.time.elapsed)?;
         current += epsilon as f64;
     }
 
@@ -555,12 +406,12 @@ pub fn render(
             for entity in &game_state.bricks.bricks {
                 entity.render(rendering_context)?;
             }
-            
+
             game_state.ball.render(rendering_context)?;
         },
         _ => ()
     };
-    
+
     match game_state.stage {
         GameStage::Gameplay => game_state.bat.render(rendering_context)?,
         _ => ()
