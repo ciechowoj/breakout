@@ -19,13 +19,14 @@
     - Temporal slow down/speed up
     - Future prediction
     - Blockage (effortless gameplay)
-- Remove 80% upscaling
+✓ Remove 80% upscaling
 - Add warning that the scored cannot be removed (after published anonymously)
 - Garbage collect empty names in scoreboard
 - Fix collisions when bat pushes the ball
 - Motion blur
 - Bent bat
 - Pause ?
+- Fix unwrap error when the scoreboard editbox is autocompleted
 - Add music / sfx
 - Shining bricks effect
 - More kinds of bricks

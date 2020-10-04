@@ -3,7 +3,11 @@ use web_sys::*;
 use wasm_bindgen::JsCast;
 
 pub fn window() -> Window {
-    return web_sys::window().expect("Failed to retrieve the reference to the global window.");
+    return web_sys::window().expect("Failed to retrieve the reference to the main window.");
+}
+
+pub fn document() -> Document {
+    return window().document().expect("Failed to retrieve the reference to the main document.");
 }
 
 pub fn into_html_element(element : Element) -> HtmlElement {

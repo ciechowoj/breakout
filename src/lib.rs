@@ -3,6 +3,7 @@ mod event;
 #[macro_use]
 mod utils;
 mod dom_utils;
+mod js_utils;
 mod game;
 mod collision;
 mod webapi;
@@ -54,6 +55,38 @@ fn reset_canvas_size(canvas : &HtmlCanvasElement) -> anyhow::Result<()> {
     canvas.set_height(scroll_height as u32);
 
     return Ok(());
+}
+
+fn update_viewport_size() {
+    let document = browser::document();
+    let root = document
+        .document_element()
+        .expect("Failed to retrieve reference to the html element.");
+
+    let outer_div = browser::get_html_element_by_id(&document, "outer-div").unwrap();
+
+    let client_width = root.client_width() as f32;
+    let client_height = root.client_height() as f32;
+
+    let aspect = 3f32 / 4f32; // w / h
+
+    let width;
+    let height;
+
+    if client_width < client_height * aspect {
+        width = client_width as i32;
+        height = (client_width / aspect) as i32;
+    }
+    else {
+        width = (client_height * aspect) as i32;
+        height = client_height as i32;
+    }
+
+    let width = format!("{}px", width);
+    let height = format!("{}px", height);
+
+    outer_div.style().set_property("width", width.as_ref()).to_anyhow().unwrap();
+    outer_div.style().set_property("height", height.as_ref()).to_anyhow().unwrap();
 }
 
 #[wasm_bindgen]
@@ -293,6 +326,19 @@ pub async fn wasm_main() {
     let overlay = browser::into_html_element(overlay);
     overlay.set_class_name("main-canvas-area");
     outer_div.append_child(&overlay).ok();
+
+    let event_target = EventTarget::from(browser::window());
+
+    let closure : Box<dyn Fn(JsValue)> = Box::new(|_event : JsValue| {
+        update_viewport_size();
+    });
+
+    closure(JsValue::NULL);
+
+    let closure = Closure::wrap(closure);
+    let function = closure.as_ref().unchecked_ref();
+    event_target.add_event_listener_with_callback("resize", function).to_anyhow().unwrap();
+    closure.forget();
 
     setup_main_loop(&document, &canvas, overlay, window).unwrap();
 }
