@@ -24,9 +24,9 @@
 - Garbage collect empty names in scoreboard
 - Fix collisions when bat pushes the ball
 ✓ Scalable fonts
-- Scalable content
+✓ Scalable content
 ✓ Remove renderable
-- make 726 * 968 a constant
+✓ Make 726 * 968 a constant
 - Motion blur
 - Bent bat
 - Pause ?

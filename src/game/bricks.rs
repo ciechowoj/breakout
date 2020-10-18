@@ -35,10 +35,12 @@ pub struct BrickConfig {
 }
 
 impl BrickConfig {
-    pub fn new (canvas_size : Vec2) -> BrickConfig {
+    pub fn new() -> BrickConfig {
+        let game_area = vec2(config::GAME_AREA_WIDTH as f32, config::GAME_AREA_HEIGHT as f32);
+
         let bricks_cols = config::NUM_BRICK_COLS;
         let brick_spacing = config::BRICK_SPACING;
-        let brick_width = ((canvas_size.x - brick_spacing) / bricks_cols as f32 - brick_spacing).floor();
+        let brick_width = ((game_area.x - brick_spacing) / bricks_cols as f32 - brick_spacing).floor();
         let brick_height = (brick_width * 0.5f32).floor();
 
         return BrickConfig {
@@ -71,10 +73,9 @@ impl Bricks {
     pub fn new() -> Bricks {
         let mut bricks : Vec<Brick> = vec![];
 
-        let canvas_size = vec2(726f32, 968f32);
         let bricks_cols = config::NUM_BRICK_COLS;
         let bricks_rows = config::NUM_BRICK_ROWS;
-        let brick_config = BrickConfig::new(canvas_size);
+        let brick_config = BrickConfig::new();
 
         let brick_size = vec2(
             brick_config.width,

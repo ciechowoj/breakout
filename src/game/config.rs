@@ -1,6 +1,9 @@
 
 pub const PI : f32 = 3.141592;
 
+pub const GAME_AREA_WIDTH : f64 = 726f64;
+pub const GAME_AREA_HEIGHT : f64 = 968f64;
+
 pub const BALL_VELOCITY : f32 = 1000f32;
 pub const BALL_START_SIZE : f32 = 19f32;
 pub const BALL_START_X : f32 = 0.5f32;

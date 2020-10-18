@@ -231,7 +231,6 @@ pub fn update(
     overlay : &HtmlElement,
     input_events : &Vec<InputEvent>,
     event_queues : &EventQueues,
-    canvas_size : Vec2,
     time : f64) -> anyhow::Result<()> {
 
     for event in input_events {
@@ -308,7 +307,7 @@ pub fn update(
 
         match game_state.stage {
             GameStage::Gameplay => {
-                let ball_status = update_ball(&game_state.bat, &mut game_state.ball, &mut game_state.bricks, canvas_size, game_state.time.elapsed)?;
+                let ball_status = update_ball(&game_state.bat, &mut game_state.ball, &mut game_state.bricks, game_state.time.elapsed)?;
 
                 game_state.score += ball_status.brick_hit_count as i64;
 
@@ -345,6 +344,15 @@ pub fn render(
 
     rendering_context.set_fill_style(&JsValue::from_str("lightgray"));
     rendering_context.fill_rect(0.0, 0.0, width, height);
+    rendering_context.set_transform(
+        width / config::GAME_AREA_WIDTH,
+        0.0,
+        0.0,
+        height / config::GAME_AREA_HEIGHT,
+        0.0,
+        0.0).unwrap();
+
+
 
     match game_state.stage {
         GameStage::Gameplay | GameStage::GameOver => {
@@ -361,6 +369,8 @@ pub fn render(
         GameStage::Gameplay => render_bat(&game_state.bat, rendering_context)?,
         _ => ()
     };
+
+    rendering_context.reset_transform().unwrap();
 
     return Ok(());
 }

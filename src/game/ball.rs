@@ -69,7 +69,6 @@ pub fn update_ball(
     bat : &Bat,
     ball : &mut Ball,
     bricks : &mut Bricks,
-    canvas_size : Vec2,
     elapsed : f32) -> anyhow::Result<BallStatus> {
 
     let new_position = ball.position + ball.effective_velocity() * elapsed;
@@ -101,12 +100,14 @@ pub fn update_ball(
         outer_collision = Some(collision);
     }
 
+    let game_area = vec2(config::GAME_AREA_WIDTH as f32, config::GAME_AREA_HEIGHT as f32);
+
     if let Some(collision) = resolve_circle_aabb_inv_collision(
         ball.position,
         new_position,
         ball.size,
-        canvas_size * 0.5,
-        canvas_size * 0.5) {
+        game_area * 0.5,
+        game_area * 0.5) {
         if collision.normal != vec2(0f32, -1f32) {
             outer_collision = Some(collision);
         }
@@ -126,7 +127,7 @@ pub fn update_ball(
         None => None
     };
 
-    if ball.position.y - ball.size > canvas_size.y {
+    if ball.position.y - ball.size > game_area.y {
         result.out_of_arena = true;
     }
 
