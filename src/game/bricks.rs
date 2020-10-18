@@ -6,7 +6,7 @@ fn mul(a: Vec2, b: Vec2) -> Vec2 {
     vec2(a.x * b.x, a.y * b.y)
 }
 
-pub struct Brick { 
+pub struct Brick {
     pub position : Vec2,
     pub size : Vec2,
     pub destruction_time : Option<f32>,
@@ -68,15 +68,16 @@ pub struct Bricks {
 }
 
 impl Bricks {
-    pub fn new(canvas_size : Vec2) -> Bricks {
+    pub fn new() -> Bricks {
         let mut bricks : Vec<Brick> = vec![];
 
+        let canvas_size = vec2(726f32, 968f32);
         let bricks_cols = config::NUM_BRICK_COLS;
         let bricks_rows = config::NUM_BRICK_ROWS;
         let brick_config = BrickConfig::new(canvas_size);
 
         let brick_size = vec2(
-            brick_config.width, 
+            brick_config.width,
             brick_config.height);
 
         let brick_origin = brick_size * 0.5;
@@ -84,7 +85,7 @@ impl Bricks {
         for y in 0..bricks_rows {
             for x in 0..bricks_cols {
                 let index = vec2(x as f32, y as f32);
-                
+
                 let brick = Brick::new(
                     brick_config.spacing + mul(brick_size + brick_config.spacing, index) + brick_origin,
                     brick_size
@@ -136,7 +137,7 @@ impl Bricks {
         let mut should_fall = false;
         let mut should_reset = false;
         let mut offset = 0f32;
-           
+
         if self.origin.y != 0f32 {
             offset = config::BRICKS_FALLING_VELOCITY * elapsed;
             should_fall = true;
@@ -173,3 +174,18 @@ impl Bricks {
     }
 }
 
+fn fmin(a: f32, b: f32) -> f32 { if a < b { a } else { b } }
+
+pub fn render_brick(brick : &Brick, rendering_context : &web_sys::CanvasRenderingContext2d) -> anyhow::Result<()> {
+    let size = brick.size * (1f32 - fmin(1f32, brick.destruction_time.unwrap_or(0f32)));
+
+    let origin = brick.position - size * 0.5;
+
+    match brick.destruction_time {
+        Some(_) => rendering_context.set_fill_style(&wasm_bindgen::JsValue::from_str("red")),
+        None => rendering_context.set_fill_style(&wasm_bindgen::JsValue::from_str("black"))
+    }
+
+    rendering_context.fill_rect(origin.x as f64, origin.y as f64, size.x as f64, size.y as f64);
+    return Ok(());
+}

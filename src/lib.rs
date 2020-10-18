@@ -419,7 +419,7 @@ pub fn update(
     let game_state = context.downcast_mut::<GameState>();
 
     if game_state.is_none() {
-        *context = Box::new(init(canvas_size, time));
+        *context = Box::new(init(time));
         let game_state = context.downcast_mut::<GameState>()
             .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
         game::init_overlay(game_state, overlay, time)?;

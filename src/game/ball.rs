@@ -2,6 +2,7 @@ use glm::*;
 use crate::game::config;
 use crate::game::bat::*;
 use crate::game::bricks::*;
+use crate::utils::*;
 use crate::collision::*;
 use js_sys::Math::random;
 
@@ -23,7 +24,7 @@ pub struct Ball {
 }
 
 impl Ball {
-    pub fn new(canvas_size : Vec2) -> Ball {
+    pub fn new() -> Ball {
         let mut ball = Ball {
             position: vec2(0f32, 0f32),
             velocity: vec2(0f32, 0f32),
@@ -32,17 +33,17 @@ impl Ball {
             freeze_time: None
         };
 
-        ball.reset_position(canvas_size);
+        ball.reset_position();
 
         return ball;
     }
 
-    pub fn reset_position(&mut self, canvas_size : Vec2) {
+    pub fn reset_position(&mut self) {
         let ball_start_position = vec2(config::BALL_START_X, config::BALL_START_Y);
         let ball_start_angle = config::BALL_START_ANGLE * (random() as f32 - 0.5f32);
         let ball_start_direction = rotate_vec2(&vec2(0f32, -1f32), ball_start_angle);
 
-        self.position = mul(ball_start_position, canvas_size);
+        self.position = mul(ball_start_position, vec2(726f32, 968f32));
         self.velocity = ball_start_direction * config::BALL_VELOCITY;
 
         self.freeze_time = Some(0f32);
@@ -130,4 +131,26 @@ pub fn update_ball(
     }
 
     return Ok(result);
+}
+
+pub fn draw_circle(
+    rendering_context : &web_sys::CanvasRenderingContext2d,
+    origin : Vec2,
+    radius : f32,
+    color : &'static str) -> anyhow::Result<()> {
+    rendering_context.begin_path();
+    rendering_context.arc(origin.x as f64, origin.y as f64, radius as f64, 0.0, two_pi()).to_anyhow()?;
+    rendering_context.set_fill_style(&wasm_bindgen::JsValue::from_str(color));
+    rendering_context.fill();
+    return Ok(());
+}
+
+pub fn render_ball(ball : &Ball, rendering_context : &web_sys::CanvasRenderingContext2d) -> anyhow::Result<()> {
+    let color = match ball.freeze_time {
+        Some(_) => "grey",
+        None => if ball.colliding { "red" } else { "black" }
+    };
+
+    draw_circle(rendering_context, ball.position, ball.size, color)?;
+    return Ok(());
 }

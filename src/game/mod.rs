@@ -21,18 +21,6 @@ use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use web_sys::*;
 
-pub fn draw_circle(
-    rendering_context : &CanvasRenderingContext2d,
-    origin : Vec2,
-    radius : f32,
-    color : &'static str) -> anyhow::Result<()> {
-    rendering_context.begin_path();
-    rendering_context.arc(origin.x as f64, origin.y as f64, radius as f64, 0.0, two_pi()).to_anyhow()?;
-    rendering_context.set_fill_style(&JsValue::from_str(color));
-    rendering_context.fill();
-    return Ok(());
-}
-
 #[allow(dead_code)]
 pub fn draw_vector(
     rendering_context : &CanvasRenderingContext2d,
@@ -48,54 +36,13 @@ pub fn draw_vector(
     return Ok(());
 }
 
-trait Renderable {
-    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()>;
-}
-
-impl Renderable for Bat {
-    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()> {
-        let origin = self.position - self.size * 0.5;
-        rendering_context.set_fill_style(&JsValue::from_str("black"));
-        rendering_context.fill_rect(origin.x as f64, origin.y as f64, self.size.x as f64, self.size.y as f64);
-        return Ok(());
-    }
-}
-
-impl Renderable for Ball {
-    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()> {
-        let color = match self.freeze_time {
-            Some(_) => "grey",
-            None => if self.colliding { "red" } else { "black" }
-        };
-
-        draw_circle(rendering_context, self.position, self.size, color)?;
-        return Ok(());
-    }
-}
-
-impl Renderable for Brick {
-    fn render(&self, rendering_context : &CanvasRenderingContext2d) -> anyhow::Result<()> {
-        let size = self.size * (1f32 - fmin(1f32, self.destruction_time.unwrap_or(0f32)));
-
-        let origin = self.position - size * 0.5;
-
-        match self.destruction_time {
-            Some(_) => rendering_context.set_fill_style(&JsValue::from_str("red")),
-            None => rendering_context.set_fill_style(&JsValue::from_str("black"))
-        }
-
-        rendering_context.fill_rect(origin.x as f64, origin.y as f64, size.x as f64, size.y as f64);
-        return Ok(());
-    }
-}
-
-fn decrease_lives(game_state : &mut GameState, canvas_size : Vec2, game_time : GameTime) {
+fn decrease_lives(game_state : &mut GameState, game_time : GameTime) {
     let ball : &mut Ball = &mut game_state.ball;
 
     game_state.lives = max(game_state.lives, 1) - 1;
 
     if game_state.lives != 0 {
-        ball.reset_position(canvas_size);
+        ball.reset_position();
     }
     else {
         game_state.stage = GameStage::GameOver;
@@ -139,7 +86,7 @@ impl GameState {
             time: GameTime { sim_time: 0f64, real_time: 0f64, elapsed: 0f32 },
             score: 4001,
             score_id: Rc::new(RefCell::new(uuid::Uuid::nil())),
-            lives: 1,
+            lives: 20,
             game_over_time: 0f64,
             keyboard_state: KeyboardState::new(),
             touch_tracker: TouchTracker::new()
@@ -147,16 +94,14 @@ impl GameState {
     }
 }
 
-pub fn init(
-    canvas_size : Vec2,
-    time : f64) -> GameState {
+pub fn init(time : f64) -> GameState {
 
-    let bat = Bat::new(canvas_size);
-    let mut ball = Ball::new(canvas_size);
+    let bat = Bat::new();
+    let mut ball = Ball::new();
 
-    ball.reset_position(canvas_size);
+    ball.reset_position();
 
-    let bricks = Bricks::new(canvas_size);
+    let bricks = Bricks::new();
 
     GameState::new(bat, ball, bricks, time)
 }
@@ -308,7 +253,7 @@ pub fn update(
                                     persist_score(overlay.clone(), name, *game_state.score_id.borrow())?;
                                 }
 
-                                *game_state = init(canvas_size, time);
+                                *game_state = init(time);
                             },
                             _ => {}
                         }
@@ -368,10 +313,10 @@ pub fn update(
                 game_state.score += ball_status.brick_hit_count as i64;
 
                 if ball_status.out_of_arena {
-                    decrease_lives(game_state, canvas_size, game_state.time);
+                    decrease_lives(game_state, game_state.time);
                 }
 
-                update_bat(&mut game_state.bat, canvas_size, game_state.time.elapsed)?;
+                update_bat(&mut game_state.bat, game_state.time.elapsed)?;
             },
             GameStage::GameOver => {
                 if game_state.time.real_time - game_state.game_over_time > config::GAME_OVER_PAUSE_TIME {
@@ -404,16 +349,16 @@ pub fn render(
     match game_state.stage {
         GameStage::Gameplay | GameStage::GameOver => {
             for entity in &game_state.bricks.bricks {
-                entity.render(rendering_context)?;
+                render_brick(entity, rendering_context)?;
             }
 
-            game_state.ball.render(rendering_context)?;
+            render_ball(&game_state.ball, rendering_context)?;
         },
         _ => ()
     };
 
     match game_state.stage {
-        GameStage::Gameplay => game_state.bat.render(rendering_context)?,
+        GameStage::Gameplay => render_bat(&game_state.bat, rendering_context)?,
         _ => ()
     };
 
