@@ -34,7 +34,7 @@
 - Add music / sfx
 - Shining bricks effect
 - More kinds of bricks
-- Procedurally generate the bricks (with the same seed value)
+    - Procedurally generate the bricks (with the same seed value)
 - Touch input / mobile control
     - The scoreboard doesn't work on mobile
 
