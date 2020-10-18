@@ -84,9 +84,9 @@ impl GameState {
             bricks: bricks,
             last_time: last_time,
             time: GameTime { sim_time: 0f64, real_time: 0f64, elapsed: 0f32 },
-            score: 4001,
+            score: 0,
             score_id: Rc::new(RefCell::new(uuid::Uuid::nil())),
-            lives: 20,
+            lives: 3,
             game_over_time: 0f64,
             keyboard_state: KeyboardState::new(),
             touch_tracker: TouchTracker::new()
@@ -249,7 +249,13 @@ pub fn update(
                         match game_state.stage {
                             GameStage::ScoreBoard => {
                                 if let Some(name) = player_name()? {
-                                    persist_score(overlay.clone(), name, *game_state.score_id.borrow())?;
+
+                                    if crate::dom_utils::window().confirm_with_message(
+                                        "Are you sure you want to post you score and nickname? The record cannot be changed or removed.")
+                                        .unwrap() {
+                                        persist_score(overlay.clone(), name, *game_state.score_id.borrow())?;
+                                    }
+
                                 }
 
                                 *game_state = init(time);

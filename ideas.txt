@@ -20,7 +20,7 @@
     - Future prediction
     - Blockage (effortless gameplay)
 ✓ Remove 80% upscaling
-- Add warning that the scored cannot be removed (after published anonymously)
+✓ Add warning that the scored cannot be removed (after published anonymously)
 - Garbage collect empty names in scoreboard
 - Fix collisions when bat pushes the ball
 ✓ Scalable fonts
