@@ -21,6 +21,7 @@ use event::*;
 use utils::*;
 use game::*;
 use crate::dom_utils as browser;
+use crate::js_utils::*;
 use glm::vec2;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global

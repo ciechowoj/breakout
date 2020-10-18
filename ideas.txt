@@ -23,6 +23,8 @@
 - Add warning that the scored cannot be removed (after published anonymously)
 - Garbage collect empty names in scoreboard
 - Fix collisions when bat pushes the ball
+- Scalable fonts
+
 - Motion blur
 - Bent bat
 - Pause ?
@@ -33,6 +35,7 @@
 - Procedurally generate the bricks (with the same seed value)
 - Touch input / mobile control
     - The scoreboard doesn't work on mobile
+
 
 - Improve hardcoded secrets handling:
     - **/connection-string.fn

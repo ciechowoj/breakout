@@ -34,3 +34,19 @@ impl JsValueEx for JsValue {
         };
     }
 }
+
+pub trait JsCastExtended where Self : wasm_bindgen::JsCast {
+    fn xdyn_into<T : wasm_bindgen::JsCast>(self) -> T {
+        match self.dyn_into::<T>() {
+            Ok(value) => value,
+            Err(_) => {
+                panic!(
+                    "Failed to cast '{}' to '{}'.",
+                    std::any::type_name::<Self>(),
+                    std::any::type_name::<T>());
+            }
+        }
+    }
+}
+
+impl JsCastExtended for web_sys::HtmlElement { }
