@@ -49,4 +49,22 @@ pub trait JsCastExtended where Self : wasm_bindgen::JsCast {
     }
 }
 
+impl JsCastExtended for web_sys::Element { }
 impl JsCastExtended for web_sys::HtmlElement { }
+impl JsCastExtended for js_sys::Object { }
+
+/*
+pub trait DocumentExt {
+
+    fn try_get_element_by_id_ext(&self, id : &str) -> Option<web_sys::HtmlElement>;
+}
+
+impl DocumentExt for web_sys::Document {
+    fn try_get_element_by_id_ext(&self, id : &str) -> Option<web_sys::HtmlElement> {
+
+
+
+    }
+}
+*/
+

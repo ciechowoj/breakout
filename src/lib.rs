@@ -58,6 +58,53 @@ fn reset_canvas_size(canvas : &HtmlCanvasElement) -> anyhow::Result<()> {
     return Ok(());
 }
 
+fn update_dynamic_fonts(width : i32) {
+    let document = browser::document();
+
+    let scale = ((if width < 480 { 480 } else { width }) as f32) * 0.012f32;
+    let vhuge_font_size = (8.71855f32 * scale) as i32;
+    let huge_font_size = (6.85410f32 * scale) as i32;
+    let vlarge_font_size = (5.38836f32 * scale) as i32;
+    let large_font_size = (4.23606f32 * scale) as i32;
+    let normal_font_size = (3.33019f32 * scale) as i32;
+    let small_font_size = (2.61803f32 * scale) as i32;
+    let footnote_font_size = (2.05817f32 * scale) as i32;
+    let script_font_size = (1.27201f32 * scale) as i32;
+    let tiny_font_size = (1f32 * scale) as i32;
+
+    let sheet = format!(r#"
+:root {{
+    --font-vhuge: {}px;
+    --font-huge: {}px;
+    --font-vlarge: {}px;
+    --font-large: {}px;
+    --font-normal: {}px;
+    --font-small: {}px;
+    --font-footnote: {}px;
+    --font-script: {}px;
+    --font-tiny: {}px;
+}}"#,   vhuge_font_size,
+        huge_font_size,
+        vlarge_font_size,
+        large_font_size,
+        normal_font_size,
+        small_font_size,
+        footnote_font_size,
+        script_font_size,
+        tiny_font_size);
+
+    let fonts_css = document.get_element_by_id("font-css");
+
+    if let Some(style) = fonts_css {
+        let style : HtmlStyleElement = style.xdyn_into();
+
+        style.set_inner_html(&sheet);
+    }
+    else {
+        browser::create_style_element(&document, &sheet, "font-css").unwrap();
+    }
+}
+
 fn update_viewport_size() {
     let document = browser::document();
     let root = document
@@ -82,6 +129,8 @@ fn update_viewport_size() {
         width = (client_height * aspect) as i32;
         height = client_height as i32;
     }
+
+    update_dynamic_fonts(width);
 
     let width = format!("{}px", width);
     let height = format!("{}px", height);
@@ -227,12 +276,11 @@ pub async fn wasm_main() {
         let canvas_clone = canvas.clone();
 
         let update = move |update: Rc<Recursive>| {
-            let rendering_context = canvas_clone
+            let rendering_context : web_sys::CanvasRenderingContext2d = canvas_clone
                 .get_context("2d")
                 .unwrap()
                 .unwrap()
-                .dyn_into::<web_sys::CanvasRenderingContext2d>()
-                .unwrap();
+                .xdyn_into();
 
             let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
                 if let Some(_) = js_value.as_f64() {

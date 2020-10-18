@@ -93,7 +93,7 @@ pub async fn create_scoreboard_html(
     index : i64,
     scores : Vec<PlayerScore>,
     score_board_id : String) -> anyhow::Result<()> {
-    let header_str = "<tr><th colspan=\"2\">High Scores</th></tr>";
+    let header_str = "<tr><th colspan=\"2\" class=\"font-large\">High Scores</th></tr>";
 
     let mut scoreboard_str = "<table>".to_string();
     scoreboard_str.push_str(header_str);
@@ -107,8 +107,8 @@ pub async fn create_scoreboard_html(
         };
 
         let row = format!("<tr>\
-            <td class=\"player-name\">{}. {}</td>\
-            <td class=\"player-score\">{}</td>\
+            <td class=\"player-name font-large\">{}. {}</td>\
+            <td class=\"player-score font-large\">{}</td>\
             </tr>",
             score.index + 1,
             name,

@@ -2,7 +2,7 @@
 #fps-counter {
     color: red;
     font-family: "Lucida Console", Courier, monospace;
-    font-size: 12px;
+    font-size: var(--font-script);
 }
 
 html {
