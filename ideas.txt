@@ -42,6 +42,8 @@
 - Improve hardcoded secrets handling:
     - **/connection-string.fn
     - **/admin-credentials.fn
+    - move admin credentials to database
+    - change the hashing function to Argon2
 
 - Publish on the internet
     - Add adds
