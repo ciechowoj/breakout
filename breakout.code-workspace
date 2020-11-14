@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "apilib"
+		},
+		{
+			"path": "admin-reset"
 		}
 	],
 	"settings": {}

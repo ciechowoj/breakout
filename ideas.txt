@@ -44,6 +44,7 @@
     - **/admin-credentials.fn
     - move admin credentials to database
     - change the hashing function to Argon2
+        - https://en.wikipedia.org/wiki/Base64#Radix-64_applications_not_compatible_with_Base64
 
 - Publish on the internet
     - Add adds

@@ -20,6 +20,24 @@
                 "base": "$rustc",
                 "fileLocation": "relative"
             }
+        },
+        {
+            "label": "Build & Run admin-reset",
+            "type": "shell",
+            "command": "cargo run --manifest-path admin-reset/Cargo.toml",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": "relative"
+            }
         }
     ],
 
