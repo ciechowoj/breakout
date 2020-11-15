@@ -11,7 +11,7 @@
     "build-dev": "webpack --config webpack.dev.js",
     "start": "webpack-dev-server --open --config webpack.dev.js",
     "clean": "rm -r dist",
-    "deploy": "rsync dist/* rusty-games-hosting:public_html"
+    "deploy": "rsync dist/* serwer2020789:public_html"
   },
   "repository": {
     "type": "git",

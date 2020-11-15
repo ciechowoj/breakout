@@ -62,6 +62,7 @@ features = [
   'HtmlElement',
   'HtmlHeadElement',
   'HtmlStyleElement',
+  'Location',
   'Performance',
   'Request',
   'RequestInit',

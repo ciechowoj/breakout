@@ -61,8 +61,13 @@ pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<Option<Strin
     return Ok(response);
 }
 
+pub fn build_uri(relative : &'static str) -> String {
+    let location = browser::window().location();
+    return format!("{}//{}/{}", location.protocol().unwrap(), location.hostname().unwrap(), relative);
+}
+
 pub async fn new_session_id_http() -> anyhow::Result<http::Response<String>> {
-    let uri = "http://rusty-games.localhost/api/session-id/new";
+    let uri = build_uri("api/session-id/new");
 
     let request = http::Request::builder()
         .uri(uri)
@@ -86,7 +91,7 @@ pub async fn new_session_id() -> anyhow::Result<String> {
 }
 
 pub async fn new_score_http(request : &NewScoreRequest) -> anyhow::Result<http::Response<NewScoreResponse>> {
-    let uri = "http://rusty-games.localhost/api/score/new";
+    let uri = build_uri("api/score/new");
     let request = serde_json::to_string(&request)?;
 
     let request = http::Request::builder()
@@ -111,7 +116,7 @@ pub async fn new_score(request : &NewScoreRequest) -> anyhow::Result<NewScoreRes
 }
 
 async fn rename_score_http(request : &RenameScoreRequest) -> anyhow::Result<http::Response<()>> {
-    let uri = "http://rusty-games.localhost/api/score/rename";
+    let uri = build_uri("api/score/rename");
     let request = serde_json::to_string(&request)?;
 
     let request = http::Request::builder()
@@ -135,7 +140,7 @@ pub async fn rename_score(request : &RenameScoreRequest) -> anyhow::Result<()> {
 }
 
 pub async fn _list_scores_http(request : &ListScoresRequest) -> anyhow::Result<http::Response<Vec<PlayerScore>>> {
-    let uri = "http://rusty-games.localhost/api/score/list";
+    let uri = build_uri("api/score/list");
     let request = serde_json::to_string(&request)?;
 
     let request = http::Request::builder()
