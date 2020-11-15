@@ -17,9 +17,11 @@ Go to the webpage and play.
 The Rust toolchain `rustup`, `rustc`, `cargo`. A tool to generate WebAssembly: `wasm-pack`. A package manager for JavaScript `npm`.
 
 ### Build commands:
-To run front-end: `npm run start` from the `www` directory.
-To build front-end: 
- - for the first time: run `wasm-pack build`
- - `npm run build` - prod, `npm run build-dev` - dev
-To build web assembly: `wasm-pack build`
-To build backend: `cargo build`
+- Front-end:
+  - start locally: `npm run start` from the `www` directory
+  - build release version: `npm run build` from the `www` directory
+  - build development version: `npm run build-dev` from the `www` directory
+  - remove build files: `npm run clean` from the `www` directory
+- Web assembly:
+  - `wasm-pack build` from the main directory
+- Back-end: `cargo build` from the `api` directory
