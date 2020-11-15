@@ -1,8 +1,12 @@
+pub mod psql;
+
 use uuid::Uuid;
 use std::convert::TryInto;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use rand::prelude::*;
+
+pub use crate::psql::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlayerScore {
@@ -60,7 +64,7 @@ pub fn rand256<T : RngCore + CryptoRng>(rng : &mut T) -> [u8; 32] {
     return result;
 }
 
-pub fn validate_proof_of_work(session_id : [u8; 32], proof_of_work : [u8; 32], degree : usize) -> (bool, [u8; 32]) {    
+pub fn validate_proof_of_work(session_id : [u8; 32], proof_of_work : [u8; 32], degree : usize) -> (bool, [u8; 32]) {
     let sha256 = Sha256::new()
         .chain(session_id)
         .chain(proof_of_work)
@@ -88,7 +92,7 @@ pub fn proof_of_work(session_id : [u8; 32], seed : u64, degree : usize) -> [u8; 
 
     loop {
         let test = rand256(&mut rng);
-    
+
         if validate_proof_of_work(session_id, test, degree).0 {
             return test;
         }

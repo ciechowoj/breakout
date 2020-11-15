@@ -38,6 +38,24 @@
                 "base": "$rustc",
                 "fileLocation": "relative"
             }
+        },
+        {
+            "label": "Build & Test apilib",
+            "type": "shell",
+            "command": "cargo test --manifest-path apilib/Cargo.toml -- --nocapture",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": ["relative", "${workspaceFolder}/apilib"],
+            }
         }
     ],
 
