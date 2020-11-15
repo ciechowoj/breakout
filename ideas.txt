@@ -56,3 +56,8 @@
     - Do not ignore errors, especialy from functions executed on executor.
     - Do something with Response<Option<T>> in api tests (maybe new response type)
     - Remove admin-pass utility
+
+- Obscure scores of other users:
+    - Only the current user can see it's real name next to the score
+    - The rest of names are randomized
+    - The scores are not randomized (so that the relative relationship between scores is maintained)
