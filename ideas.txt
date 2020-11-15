@@ -41,10 +41,10 @@
 
 - Improve hardcoded secrets handling:
     - **/connection-string.fn
-    - **/admin-credentials.fn
-    - move admin credentials to database
-    - change the hashing function to Argon2
-        - https://en.wikipedia.org/wiki/Base64#Radix-64_applications_not_compatible_with_Base64
+    ✓ Change **/admin-credentials.fn to database stored password.
+    ✓ move admin credentials to database
+    ✓ change the hashing function to Argon2
+        ✓ https://en.wikipedia.org/wiki/Base64#Radix-64_applications_not_compatible_with_Base64
 
 - Publish on the internet
     - Add adds
@@ -54,3 +54,4 @@
 - Refactoring
     - Consolidate usages of dyn_into::<HtlmElement>
     - Do not ignore errors, especialy from functions executed on executor.
+    - Do something with Response<Option<T>> in api tests (maybe new response type)
