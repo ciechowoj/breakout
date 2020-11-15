@@ -68,7 +68,8 @@ pub struct GameState {
     pub lives : u32,
     pub game_over_time : f64,
     pub keyboard_state : KeyboardState,
-    pub touch_tracker : TouchTracker
+    pub touch_tracker : TouchTracker,
+    pub reset_requested : bool
 }
 
 impl GameState {
@@ -89,21 +90,21 @@ impl GameState {
             lives: 3,
             game_over_time: 0f64,
             keyboard_state: KeyboardState::new(),
-            touch_tracker: TouchTracker::new()
+            touch_tracker: TouchTracker::new(),
+            reset_requested: false
         }
     }
-}
 
-pub fn init(time : f64) -> GameState {
+    pub fn init(time : f64) -> GameState {
+        let bat = Bat::new();
+        let mut ball = Ball::new();
 
-    let bat = Bat::new();
-    let mut ball = Ball::new();
+        ball.reset_position();
 
-    ball.reset_position();
+        let bricks = Bricks::new();
 
-    let bricks = Bricks::new();
-
-    GameState::new(bat, ball, bricks, time)
+        GameState::new(bat, ball, bricks, time)
+    }
 }
 
 pub fn init_overlay(
@@ -258,7 +259,8 @@ pub fn update(
 
                                 }
 
-                                *game_state = init(time);
+                                game_state.reset_requested = true;
+                                return Ok(());
                             },
                             _ => {}
                         }
@@ -270,6 +272,10 @@ pub fn update(
             },
             InputEvent::MouseMove { x : _, y : _ } => { }
         }
+    }
+
+    if game_state.reset_requested {
+        *game_state = GameState::init(time);
     }
 
     game_state.keyboard_state.update_legacy(input_events);

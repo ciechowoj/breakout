@@ -55,3 +55,4 @@
     - Consolidate usages of dyn_into::<HtlmElement>
     - Do not ignore errors, especialy from functions executed on executor.
     - Do something with Response<Option<T>> in api tests (maybe new response type)
+    - Remove admin-pass utility
