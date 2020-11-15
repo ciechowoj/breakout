@@ -462,6 +462,30 @@ fn load_connection_string() -> Result<String, anyhow::Error> {
     return Ok(result);
 }
 
+fn log_error<S: AsRef<str> + std::fmt::Display>(message : S) {
+    const HTTP_HOST : &'static str = "HTTP_HOST";
+
+    let use_stderr : bool = match env::var(HTTP_HOST) {
+        Ok(value) => value.contains("localhost"),
+        Err(_) => true
+    };
+
+    if use_stderr {
+        eprintln!("{}", message);
+    }
+    else {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open("error.log")
+            .unwrap();
+
+        let _ = writeln!(file, "{}", message);
+        let _ = file.flush();
+    }
+}
+
 fn print_output<T : serde::Serialize>(response : &anyhow::Result<Response<T>>) -> anyhow::Result<()> {
 
     match response {
@@ -473,9 +497,7 @@ fn print_output<T : serde::Serialize>(response : &anyhow::Result<Response<T>>) -
         Err(error) => {
             println!("Content-Type: application/json");
             println!("Status: 400\n");
-
-            let mut stderr = std::io::stderr();
-            writeln!(&mut stderr, "{}", error.to_string()).unwrap();
+            log_error(format!("{}", error.to_string()));
         }
     }
 
@@ -508,7 +530,7 @@ async fn inner_main() -> Result<(), anyhow::Error> {
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            log_error(format!("connection error: {}", e));
         }
     });
 
@@ -530,9 +552,7 @@ async fn main() -> anyhow::Result<()> {
 
     return match result {
         Err(error) => {
-            let mut stderr = std::io::stderr();
-            writeln!(&mut stderr, "{}", error.to_string()).unwrap();
-
+            log_error(format!("{}", error.to_string()));
             Err(error)
         },
         Ok(()) => Ok(())
