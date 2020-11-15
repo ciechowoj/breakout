@@ -5,6 +5,5 @@ use std::fs;
 fn main() -> Result<(), Box<dyn error::Error>> {
     let home = env::var("HOME")?;
     fs::copy(format!("{}{}", home, "/load_connection_string.rs"), "./connection-string.fn")?;
-    fs::copy(format!("{}{}", home, "/load_admin_credentials.rs"), "./admin-credentials.fn")?;
     Ok(())
 }

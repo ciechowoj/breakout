@@ -5,6 +5,7 @@ authors = ["Wojciech Szęszoł <keepitsimplesirius@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+rust-argon2 = ">= 0.8"
 tokio = { version = "^0.2", features = ["rt-core", "sync", "macros"] }
 tokio-postgres = { version = "^0.5", features = ["with-uuid-0_8", "with-chrono-0_4"] }
 serde = { version = "^1.0", features = ["derive"] }

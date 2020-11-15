@@ -42,7 +42,7 @@ fn cgi_get_api_exe() -> Result<String> {
     return Ok(api_exe.to_owned());
 }
 
-fn cgi_output_to_response<T: serde::de::DeserializeOwned>(output : std::process::Output) -> Result<Response<T>> {
+fn cgi_output_to_response<T: serde::de::DeserializeOwned>(output : std::process::Output) -> Result<Response<Option<T>>> {
     if !output.status.success() {
         println!("status: {}", output.status);
         io::stderr().write_all(&output.stderr)?;
@@ -75,19 +75,30 @@ fn cgi_output_to_response<T: serde::de::DeserializeOwned>(output : std::process:
     }
 
     let status = match status { Some(status) => StatusCode::from_u16(status.parse()?)?, None => StatusCode::OK };
-    let response : Response<T> = Response::builder()
-        .status(status)
-        .body(serde_json::from_str(content)?)
-        .unwrap();
 
-    return Ok(response);
+    if status == http::StatusCode::OK {
+        let response : Response<Option<T>> = Response::builder()
+            .status(status)
+            .body(Some(serde_json::from_str(content)?))
+            .unwrap();
+
+        return Ok(response);
+    }
+    else {
+        let response : Response<Option<T>> = Response::builder()
+            .status(status)
+            .body(None)
+            .unwrap();
+
+        return Ok(response);
+    }
 }
 
 fn issue_api_request<T: serde::de::DeserializeOwned>(
     database : &str,
     method : &str,
     uri : &str,
-    content : &str) -> Result<Response<T>> {
+    content : &str) -> Result<Response<Option<T>>> {
     let api_exe = cgi_get_api_exe()?;
     let api_exe = api_exe.as_str();
 
@@ -125,7 +136,7 @@ fn issue_api_request_with_authz<T: serde::de::DeserializeOwned>(
     method : &str,
     uri : &str,
     content : &str,
-    credentials : &str) -> Result<Response<T>> {
+    credentials : &str) -> Result<Response<Option<T>>> {
     let api_exe = cgi_get_api_exe()?;
     let api_exe = api_exe.as_str();
 
@@ -210,11 +221,24 @@ async fn with_database(
         .batch_execute(sql)
         .await?;
 
+    with_root_password(&client).await?;
+
     callback(&client)?;
 
     /* client
         .execute(format!("DROP DATABASE {};", database).as_str(), &[])
         .await?;*/
+
+    return Ok(());
+}
+
+async fn with_root_password(client : &Client) -> anyhow::Result<()> {
+    let config = argon2::Config::default();
+    let encoded = argon2::hash_encoded("password".as_bytes(), "saltsaltsalt".as_bytes(), &config).unwrap();
+
+    client
+        .execute("SELECT upsert_password($1, $2);", &[&"root", &encoded])
+        .await?;
 
     return Ok(());
 }
@@ -242,10 +266,11 @@ fn assert_json_eq(a : &str, b : &str) {
 // ("GET", "/api/session-id/new")
 #[tokio::test]
 async fn new_session_id_test() -> Result<(), Box<dyn std::error::Error>> {
-    let actual : Response<String> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
+    let actual : Response<Option<String>> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
 
     assert_eq!(StatusCode::OK, actual.status());
-    assert_ne!("", actual.body());
+    assert_ne!(None, *actual.body());
+    assert_ne!(Some("".to_owned()), *actual.body());
 
     Ok(())
 }
@@ -255,12 +280,12 @@ async fn new_session_id_test() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-        let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Maxymilian TheBest", "score": 1000 }"#)?;
-        let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Second Player", "score": 4 }"#)?;
-        let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Third Player", "score": 3 }"#)?;
-        let _ : Response<()> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 2 }"#)?;
+        let _ : Response<Option<()>> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Maxymilian TheBest", "score": 1000 }"#)?;
+        let _ : Response<Option<()>> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Second Player", "score": 4 }"#)?;
+        let _ : Response<Option<()>> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Third Player", "score": 3 }"#)?;
+        let _ : Response<Option<()>> = issue_api_request("simple_test", "POST", "/api/score/add", r#"{ "name": "Fourth Player", "score": 2 }"#)?;
 
-        let actual : Response<Vec<PlayerScore>> = issue_api_request("simple_test", "POST", "/api/score/list", r#"{}"#)?;
+        let actual : Response<Option<Vec<PlayerScore>>> = issue_api_request("simple_test", "POST", "/api/score/list", r#"{}"#)?;
 
         let expected = r#"[
             { "index": 0, "name": "Maxymilian TheBest", "score": 1000 },
@@ -270,7 +295,7 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
         ]"#;
 
         assert_eq!(StatusCode::OK, actual.status());
-        assert_json_eq(expected, serde_json::to_string(&actual.body())?.as_str());
+        assert_json_eq(expected, serde_json::to_string(actual.body().as_ref().unwrap())?.as_str());
 
         return Ok(());
     };
@@ -283,29 +308,29 @@ async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn test_init_checks_admin_password() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-        let response : Response<()> = issue_api_request(
+        let response : Response<Option<()>> = issue_api_request(
             "test_init_checks_admin_password",
             "POST",
             "/api/admin/initialize",
             r#""#)?;
 
-        assert_eq!(StatusCode::UNAUTHORIZED, response.status());
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
 
-        let response : Response<()> = issue_api_request_with_authz(
+        let response : Response<Option<()>> = issue_api_request_with_authz(
             "test_init_checks_admin_password",
             "POST",
             "/api/admin/initialize",
             r#""#,
-            "admin:password")?;
+            "root:password")?;
 
         assert_eq!(StatusCode::OK, response.status());
 
-        let response : Response<()> = issue_api_request_with_authz(
+        let response : Response<Option<()>> = issue_api_request_with_authz(
             "test_init_checks_admin_password",
             "POST",
             "/api/admin/initialize",
             r#""#,
-            "admin:wrong-password")?;
+            "root:wrong-password")?;
 
         assert_eq!(StatusCode::UNAUTHORIZED, response.status());
 
@@ -318,40 +343,28 @@ async fn test_init_checks_admin_password() -> Result<(), Box<dyn std::error::Err
 }
 
 #[tokio::test]
-async fn test_init_creates_default_scores() -> Result<(), Box<dyn std::error::Error>> {
-    let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
-
-        return Ok(());
-    };
-
-    with_database("test_init_creates_default_scores", body).await?;
-
-    Ok(())
-}
-
-#[tokio::test]
 async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api")?;
 
-        let session_id : Response<String> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
+        let session_id : Response<Option<String>> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
 
         let mut decoded_session_id = [0u8; 32];
-        hex::decode_to_slice(session_id.body(), &mut decoded_session_id)?;
+        hex::decode_to_slice(session_id.body().as_ref().unwrap(), &mut decoded_session_id)?;
         let proof_of_work = proof_of_work(decoded_session_id, 42u64, 8);
 
         let request = NewScoreRequest {
             score: 85i64,
-            session_id: session_id.body().clone(),
+            session_id: session_id.body().as_ref().unwrap().clone(),
             proof_of_work: hex::encode_upper(proof_of_work),
             limit: 4i64
         };
 
         let request_json = serde_json::to_string(&request)?;
 
-        let actual : Response<NewScoreResponse> = issue_api_request(
+        let actual : Response<Option<NewScoreResponse>> = issue_api_request(
             "test_new_rename_api",
             "POST",
             "/api/score/new",
@@ -366,7 +379,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
 
         assert_eq!(StatusCode::OK, actual.status());
 
-        let id = match actual.body() {
+        let id = match actual.body().as_ref().unwrap() {
             NewScoreResponse::Response { id, index: _, scores } => {
                 assert_json_eq(expected, serde_json::to_string(&scores)?.as_str());
                 Ok(id)
@@ -374,7 +387,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
             NewScoreResponse::Error(error) => Err(anyhow!("{}", error))
         }?;
 
-        let actual : Response<()> = issue_api_request(
+        let actual : Response<Option<()>> = issue_api_request(
             "test_new_rename_api",
             "POST",
             "/api/score/rename",
@@ -382,7 +395,7 @@ async fn test_new_rename_api() -> Result<(), Box<dyn std::error::Error>> {
 
         assert_eq!(StatusCode::OK, actual.status());
 
-        let actual : Response<Vec<PlayerScore>> = issue_api_request(
+        let actual : Response<Option<Vec<PlayerScore>>> = issue_api_request(
             "test_new_rename_api",
             "POST",
             "/api/score/list",
@@ -413,24 +426,24 @@ async fn test_new_rename_api_return_records_from_the_middle() -> Result<(), Box<
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api_return_records_from_the_middle")?;
 
-        let session_id : Response<String> = issue_api_request("test_new_rename_api_return_records_from_the_middle", "GET", "/api/session-id/new", r#""#)?;
+        let session_id : Response<Option<String>> = issue_api_request("test_new_rename_api_return_records_from_the_middle", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
 
         let mut decoded_session_id = [0u8; 32];
-        hex::decode_to_slice(session_id.body(), &mut decoded_session_id)?;
+        hex::decode_to_slice(session_id.body().as_ref().unwrap(), &mut decoded_session_id)?;
         let proof_of_work = proof_of_work(decoded_session_id, 42u64, 8);
 
         let request = NewScoreRequest {
             score: 55i64,
-            session_id: session_id.body().clone(),
+            session_id: session_id.body().as_ref().unwrap().clone(),
             proof_of_work: hex::encode_upper(proof_of_work),
             limit: 4i64
         };
 
         let request_json = serde_json::to_string(&request)?;
 
-        let actual : Response<NewScoreResponse> = issue_api_request(
+        let actual : Response<Option<NewScoreResponse>> = issue_api_request(
             "test_new_rename_api_return_records_from_the_middle",
             "POST",
             "/api/score/new",
@@ -445,7 +458,7 @@ async fn test_new_rename_api_return_records_from_the_middle() -> Result<(), Box<
 
         assert_eq!(StatusCode::OK, actual.status());
 
-        let id = match actual.body() {
+        match actual.body().as_ref().unwrap() {
             NewScoreResponse::Response { id, index: _, scores } => {
                 assert_json_eq(expected, serde_json::to_string(&scores)?.as_str());
                 Ok(id)
@@ -466,11 +479,11 @@ async fn test_new_rename_api_invalid_session_id() -> Result<(), Box<dyn std::err
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api_invalid_session_id")?;
 
-        let session_id : Response<String> = issue_api_request("test_new_rename_api_invalid_session_id", "GET", "/api/session-id/new", r#""#)?;
+        let session_id : Response<Option<String>> = issue_api_request("test_new_rename_api_invalid_session_id", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
 
-        let session_id_amended = session_id.body()
+        let session_id_amended = session_id.body().as_ref().unwrap()
             .char_indices()
             .map(|(i, c)| if i == 0 { if c == '0' { '1' } else { '0' } } else { c })
             .collect::<String>();
@@ -484,7 +497,7 @@ async fn test_new_rename_api_invalid_session_id() -> Result<(), Box<dyn std::err
 
         let request_json = serde_json::to_string(&request)?;
 
-        let actual : Response<NewScoreResponse> = issue_api_request(
+        let actual : Response<Option<NewScoreResponse>> = issue_api_request(
             "test_new_rename_api_invalid_session_id",
             "POST",
             "/api/score/new",
@@ -505,24 +518,24 @@ async fn test_new_rename_api_session_id_cannot_be_reused() -> Result<(), Box<dyn
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api_session_id_cannot_be_reused")?;
 
-        let session_id : Response<String> = issue_api_request("test_new_rename_api_session_id_cannot_be_reused", "GET", "/api/session-id/new", r#""#)?;
+        let session_id : Response<Option<String>> = issue_api_request("test_new_rename_api_session_id_cannot_be_reused", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
 
         let mut decoded_session_id = [0u8; 32];
-        hex::decode_to_slice(session_id.body(), &mut decoded_session_id)?;
+        hex::decode_to_slice(session_id.body().as_ref().unwrap(), &mut decoded_session_id)?;
         let proof_of_work = proof_of_work(decoded_session_id, 42u64, 8);
 
         let request = NewScoreRequest {
             score: 85i64,
-            session_id: session_id.body().clone(),
+            session_id: session_id.body().as_ref().unwrap().clone(),
             proof_of_work: hex::encode_upper(proof_of_work),
             limit: 4i64
         };
 
         let request_json = serde_json::to_string(&request)?;
 
-        let actual : Response<NewScoreResponse> = issue_api_request(
+        let actual : Response<Option<NewScoreResponse>> = issue_api_request(
             "test_new_rename_api_session_id_cannot_be_reused",
             "POST",
             "/api/score/new",
@@ -530,7 +543,7 @@ async fn test_new_rename_api_session_id_cannot_be_reused() -> Result<(), Box<dyn
 
         assert_eq!(StatusCode::OK, actual.status());
 
-        let actual : Response<NewScoreResponse> = issue_api_request(
+        let actual : Response<Option<NewScoreResponse>> = issue_api_request(
             "test_new_rename_api_session_id_cannot_be_reused",
             "POST",
             "/api/score/new",
@@ -551,20 +564,20 @@ async fn test_new_rename_api_invalid_proof_of_work() -> Result<(), Box<dyn std::
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {
         fill_with_test_data("test_new_rename_api_invalid_proof_of_work")?;
 
-        let session_id : Response<String> = issue_api_request("test_new_rename_api_invalid_proof_of_work", "GET", "/api/session-id/new", r#""#)?;
+        let session_id : Response<Option<String>> = issue_api_request("test_new_rename_api_invalid_proof_of_work", "GET", "/api/session-id/new", r#""#)?;
 
         assert_eq!(StatusCode::OK, session_id.status());
 
         let request = NewScoreRequest {
             score: 85i64,
-            session_id: session_id.body().clone(),
-            proof_of_work: session_id.body().clone(),
+            session_id: session_id.body().as_ref().unwrap().clone(),
+            proof_of_work: session_id.body().as_ref().unwrap().clone(),
             limit: 4i64
         };
 
         let request_json = serde_json::to_string(&request)?;
 
-        let actual : Response<NewScoreResponse> = issue_api_request(
+        let actual : Response<Option<NewScoreResponse>> = issue_api_request(
             "test_new_rename_api_invalid_proof_of_work",
             "POST",
             "/api/score/new",

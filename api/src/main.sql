@@ -1,4 +1,11 @@
 
+CREATE TABLE IF NOT EXISTS passwords (
+    name varchar(128) PRIMARY KEY,
+    hash varchar(128) NOT NULL,
+    access_time timestamptz,
+    creation_time timestamptz,
+    modify_time timestamptz);
+
 CREATE TABLE IF NOT EXISTS high_scores (
     id uuid PRIMARY KEY,
     name varchar(128) NOT NULL,
@@ -104,4 +111,28 @@ AS $$
         FROM collected, effective_bounds
         WHERE effective_lower <= collected.index AND collected.index < effective_upper
         ORDER BY index ASC
+$$;
+
+CREATE OR REPLACE FUNCTION upsert_password(varchar(128), varchar(128))
+RETURNS void
+LANGUAGE SQL
+AS $$
+    INSERT INTO
+        passwords (name, hash, access_time, creation_time, modify_time)
+    VALUES
+        ($1, $2, (SELECT Now()), (SELECT Now()), (SELECT Now()))
+    ON CONFLICT (name) DO UPDATE SET
+        name = passwords.name,
+        hash = EXCLUDED.hash,
+        access_time = passwords.access_time,
+        creation_time = passwords.creation_time,
+        modify_time = EXCLUDED.modify_time;
+$$;
+
+CREATE OR REPLACE FUNCTION acquire_password_hash(varchar(128))
+RETURNS TABLE(name varchar(128), hash varchar(128))
+LANGUAGE SQL
+AS $$
+    UPDATE passwords SET access_time = (SELECT Now()) WHERE name = $1;
+    SELECT name, hash FROM passwords WHERE name = $1;
 $$;

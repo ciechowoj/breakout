@@ -329,7 +329,7 @@ async fn rename_score_http(client : &Client, request : &Request<RenameScoreReque
     return Ok(response);
 }
 
-async fn authenticate(request : &Request<()>) -> anyhow::Result<Response<()>> {
+async fn authenticate(client : &Client, request : &Request<()>) -> anyhow::Result<Response<()>> {
     fn unauthorized() -> anyhow::Result<Response<()>> {
         let response = Response::builder()
             .status(StatusCode::UNAUTHORIZED)
@@ -362,54 +362,49 @@ async fn authenticate(request : &Request<()>) -> anyhow::Result<Response<()>> {
         return Ok((login.to_owned(), password.to_owned()));
     }
 
-    match request.headers().get(AUTHORIZATION) {
-        Some(header) => {
-            let header = header.to_str()?;
+    fn get_credentials(request : &Request<()>) -> anyhow::Result<(String, String)> {
+        match request.headers().get(AUTHORIZATION) {
+            Some(header) => {
+                let header = header.to_str()?;
 
-            let header = match header.strip_prefix("Basic ") {
-                Some(suffix) => suffix,
-                None => { return unauthorized(); }
-            };
+                let header = match header.strip_prefix("Basic ") {
+                    Some(suffix) => suffix,
+                    None => { return Err(anyhow!("Unknown authorization header!")); }
+                };
 
-            let (login, password) = parse_credentials(header)?;
-
-            let (admin_login, admin_hash, admin_salt) = include!("../admin-credentials.fn");
-
-            if login != admin_login {
-                return unauthorized();
+                return parse_credentials(header);
             }
-
-            let password_bytes = password.as_bytes();
-
-            let mut admin_salt_bytes = [0u8; 32];
-            hex::decode_to_slice(admin_salt, &mut admin_salt_bytes)?;
-
-            let sha256 = Sha256::new()
-                .chain(password_bytes)
-                .chain(admin_salt_bytes)
-                .finalize();
-
-            let hash = hex::encode_upper(sha256);
-
-            if hash != admin_hash {
-                return unauthorized();
-            }
-            else {
-                let response = Response::builder()
-                    .status(StatusCode::OK)
-                    .body(())?;
-
-                return Ok(response);
-            }
+            None => { return Err(anyhow!("Missing authorization header!")); }
         }
-        None => {
+    }
+
+    let (login, password) = get_credentials(request)?;
+
+    let rows = client
+        .query("SELECT * FROM acquire_password_hash($1);", &[&login])
+        .await?;
+
+    if let Some(row) = rows.iter().next() {
+        let hash = row.get::<&str, String>("hash");
+        let verified = argon2::verify_encoded(hash.as_str(), password.as_bytes())?;
+
+        if !verified {
             return unauthorized();
         }
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .body(())?;
+
+        return Ok(response);
+    }
+    else {
+        return Err(anyhow!("User not found!"));
     }
 }
 
 async fn initialize(client : &Client, request : &Request<()>) -> anyhow::Result<Response<()>> {
-    let response = authenticate(request).await?;
+    let response = authenticate(client, request).await?;
 
     if response.status() != StatusCode::OK {
         return Ok(response);
@@ -467,10 +462,22 @@ fn load_connection_string() -> Result<String, anyhow::Error> {
     return Ok(result);
 }
 
-fn print_output<T : serde::Serialize>(response : &Response<T>) -> anyhow::Result<()> {
-    println!("Content-Type: application/json");
-    println!("Status: {}\n", response.status().as_u16());
-    println!("{}", serde_json::to_string(&response.body())?);
+fn print_output<T : serde::Serialize>(response : &anyhow::Result<Response<T>>) -> anyhow::Result<()> {
+
+    match response {
+        Ok(response) => {
+            println!("Content-Type: application/json");
+            println!("Status: {}\n", response.status().as_u16());
+            println!("{}", serde_json::to_string(&response.body())?);
+        },
+        Err(error) => {
+            println!("Content-Type: application/json");
+            println!("Status: 400\n");
+
+            let mut stderr = std::io::stderr();
+            writeln!(&mut stderr, "{}", error.to_string()).unwrap();
+        }
+    }
 
     return Ok(());
 }
@@ -489,7 +496,7 @@ async fn inner_main() -> Result<(), anyhow::Error> {
 
     // Database connection not required.
     match (request.method().as_str(), request.uri().path()) {
-        ("GET", "/api/session-id/new") => { print_output(&new_session_id().await?)?; return Ok(()); },
+        ("GET", "/api/session-id/new") => { print_output(&new_session_id().await)?; return Ok(()); },
         _ => ()
     };
 
@@ -506,12 +513,12 @@ async fn inner_main() -> Result<(), anyhow::Error> {
     });
 
     match (request.method().as_str(), request.uri().path()) {
-        ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await?)?,
-        ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await?)?,
-        ("POST", "/api/score/new") => print_output(&new_score_http(&client, &deserialize(request)?).await?)?,
-        ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await?)?,
-        ("POST", "/api/admin/initialize") => print_output(&initialize(&client, &deserialize(request)?).await?)?,
-        _ => print_output(&Response::builder().status(StatusCode::NOT_FOUND).body(())?)?
+        ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await)?,
+        ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await)?,
+        ("POST", "/api/score/new") => print_output(&new_score_http(&client, &deserialize(request)?).await)?,
+        ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await)?,
+        ("POST", "/api/admin/initialize") => print_output(&initialize(&client, &deserialize(request)?).await)?,
+        _ => print_output(&Ok(Response::builder().status(StatusCode::NOT_FOUND).body(())?))?
     };
 
     Ok(())
