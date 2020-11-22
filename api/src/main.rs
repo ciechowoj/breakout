@@ -548,6 +548,13 @@ async fn inner_main() -> Result<(), anyhow::Error> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+
+    let status = simple_postgres::query();
+    log_error(status);
+
+
+    return Ok(());
+
     let result = inner_main().await;
 
     return match result {

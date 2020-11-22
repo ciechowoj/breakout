@@ -1,12 +1,8 @@
-pub mod psql;
-
 use uuid::Uuid;
 use std::convert::TryInto;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use rand::prelude::*;
-
-pub use crate::psql::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PlayerScore {

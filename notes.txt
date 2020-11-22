@@ -70,7 +70,7 @@ psql -d template1
 CREATE DATABASE rusty_games;
 \q
 
-# Condifure postgre to run unit tests
+# Configure postgre to run unit tests
 sudo -u postgres createuser testuser
 psql -d template1
 ALTER USER testuser WITH PASSWORD 'password';

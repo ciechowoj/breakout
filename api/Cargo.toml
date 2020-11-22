@@ -14,6 +14,7 @@ uuid = { version = "0.8", features = ["serde", "v4"] }
 chrono = { version = "^0.4", features = ["serde"] }
 anyhow = "1.0"
 apilib = { path = "../apilib" }
+simple-postgres = { path = "../simple-postgres" }
 http = { version = "^0.2" }
 hex = "^0.4.2"
 sha2 = "^0.9.0"

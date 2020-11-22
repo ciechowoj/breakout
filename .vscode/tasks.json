@@ -56,6 +56,24 @@
                 "base": "$rustc",
                 "fileLocation": ["relative", "${workspaceFolder}/apilib"],
             }
+        },
+        {
+            "label": "Build & Test simple-postgres",
+            "type": "shell",
+            "command": "cargo test --manifest-path simple-postgres/Cargo.toml test_uuid_params -- --nocapture",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "base": "$rustc",
+                "fileLocation": ["relative", "${workspaceFolder}/simple-postgres"]
+            }
         }
     ],
 
