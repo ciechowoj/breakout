@@ -15,3 +15,11 @@ ON CONFLICT (name) DO UPDATE SET
     access_time = passwords.access_time,
     creation_time = passwords.creation_time,
     modify_time = EXCLUDED.modify_time;
+
+CREATE OR REPLACE FUNCTION acquire_password_hash(varchar(128))
+RETURNS TABLE(name varchar(128), hash varchar(128))
+LANGUAGE SQL
+AS $$
+    UPDATE passwords SET access_time = (SELECT Now()) WHERE name = $1;
+    SELECT name, hash FROM passwords WHERE name = $1;
+$$;

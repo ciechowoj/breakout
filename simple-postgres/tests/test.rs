@@ -16,6 +16,9 @@ fn test_basic_types_params() {
     let value : String = query!(connection, "SELECT $1;", "Hello, world!").unwrap();
     assert_eq!("Hello, world!".to_owned() , value);
 
+    let value : String = query!(connection, "SELECT $1;", "Hello, world!".to_owned()).unwrap();
+    assert_eq!("Hello, world!".to_owned() , value);
+
     let value : (String, String) = query!(connection, "SELECT $1, $2;", "Hello!", "World?").unwrap();
     assert_eq!(("Hello!".to_owned(), "World?".to_owned()), value);
 
@@ -116,9 +119,16 @@ fn unique_constraint() {
     assert_eq!(SqlState::UniqueViolation, value.err().unwrap().sql_state);
 }
 
-/*#[test]
+#[test]
 fn query_multiple_statements() {
-    let value : Vec<i64> = query(CONNECTION_STRING, "SELECT * FROM test_vec_i64; SELECT * FROM test_vec_i64;");
-    assert_eq!(vec!(1i64, 2i64, 3i64, 1i64, 2i64, 3i64), value);
-}*/
+    let connection = Connection::new(CONNECTION_STRING);
+
+    let value : i64 = query!(connection,
+        "DROP TABLE IF EXISTS multiple_statements;\
+        CREATE TABLE multiple_statements (value int);\
+        INSERT INTO multiple_statements VALUES (47);\
+        SELECT * FROM multiple_statements;").unwrap();
+
+    assert_eq!(47, value);
+}
 

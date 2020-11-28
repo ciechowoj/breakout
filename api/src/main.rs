@@ -8,7 +8,7 @@ use std::str;
 use tokio_postgres::{Client, NoTls};
 use tokio_postgres::error::SqlState;
 use serde::{de};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize};
 use chrono::{Utc};
 use uuid::Uuid;
 use apilib::*;
@@ -186,30 +186,33 @@ fn validate_session_id(session_id : [u8; 32]) -> anyhow::Result<bool> {
     return Ok(true);
 }
 
-async fn create_high_scores_table(client : &Client) -> anyhow::Result<()> {
-    client.execute(
+async fn create_high_scores_table(connection : &simple_postgres::Connection) -> anyhow::Result<()> {
+    use simple_postgres::*;
+
+    query!(
+        connection,
         "CREATE TABLE IF NOT EXISTS high_scores (
             id uuid PRIMARY KEY,
             name varchar(128) NOT NULL,
             score bigint,
-            created_time timestamptz);", &[]).await?;
+            created_time timestamptz);")?;
 
     return Ok(());
 }
 
-async fn create_default_high_scores(client : &Client) -> anyhow::Result<()> {
-    create_high_scores_table(client).await?;
+async fn create_default_high_scores(connection : &simple_postgres::Connection) -> anyhow::Result<()> {
+    use simple_postgres::*;
 
-    let statement = client.prepare(
-        "INSERT INTO high_scores(id, name, score, created_time) VALUES ($1, $2, $3, $4);"
-    ).await?;
+    create_high_scores_table(connection).await?;
 
-    client.execute(&statement, &[&Uuid::new_v4(), &"Alistair", &16000i64, &Utc::now()]).await?;
-    client.execute(&statement, &[&Uuid::new_v4(), &"Ferris", &8000i64, &Utc::now()]).await?;
-    client.execute(&statement, &[&Uuid::new_v4(), &"Gordon", &4000i64, &Utc::now()]).await?;
-    client.execute(&statement, &[&Uuid::new_v4(), &"Henry", &2000i64, &Utc::now()]).await?;
-    client.execute(&statement, &[&Uuid::new_v4(), &"Voytech", &1000i64, &Utc::now()]).await?;
-    client.execute(&statement, &[&Uuid::new_v4(), &"Voytech", &1000i64, &Utc::now()]).await?;
+    let sql = "INSERT INTO high_scores(id, name, score, created_time) VALUES ($1, $2, $3, $4);";
+
+    query!(connection, sql, Uuid::new_v4(), "Alistair", 16000i64, Utc::now())?;
+    query!(connection, sql, Uuid::new_v4(), "Ferris", 8000i64, Utc::now())?;
+    query!(connection, sql, Uuid::new_v4(), "Gordon", 4000i64, Utc::now())?;
+    query!(connection, sql, Uuid::new_v4(), "Henry", 2000i64, Utc::now())?;
+    query!(connection, sql, Uuid::new_v4(), "Voytech", 1000i64, Utc::now())?;
+    query!(connection, sql, Uuid::new_v4(), "Voytech", 1000i64, Utc::now())?;
 
     return Ok(());
 }
@@ -267,7 +270,7 @@ async fn new_score_http(request : &Request<NewScoreRequest>) -> anyhow::Result<R
         }
     }
 
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Debug, Deserialize)]
     struct Row {
         pub index : i64,
         pub id : Uuid,
@@ -326,7 +329,9 @@ async fn rename_score_http(client : &Client, request : &Request<RenameScoreReque
     return Ok(response);
 }
 
-async fn authenticate(client : &Client, request : &Request<()>) -> anyhow::Result<Response<()>> {
+async fn authenticate(connection : &simple_postgres::Connection, request : &Request<()>) -> anyhow::Result<Response<()>> {
+    use simple_postgres::*;
+
     fn unauthorized() -> anyhow::Result<Response<()>> {
         let response = Response::builder()
             .status(StatusCode::UNAUTHORIZED)
@@ -377,12 +382,16 @@ async fn authenticate(client : &Client, request : &Request<()>) -> anyhow::Resul
 
     let (login, password) = get_credentials(request)?;
 
-    let rows = client
-        .query("SELECT * FROM acquire_password_hash($1);", &[&login])
-        .await?;
+    #[derive(Debug, Deserialize)]
+    struct Row {
+        name : String,
+        hash : String
+    }
+
+    let rows : Vec<Row> = query!(connection, "SELECT * FROM acquire_password_hash($1::varchar(128));", login)?;
 
     if let Some(row) = rows.iter().next() {
-        let hash = row.get::<&str, String>("hash");
+        let hash = &row.hash;
         let verified = argon2::verify_encoded(hash.as_str(), password.as_bytes())?;
 
         if !verified {
@@ -400,20 +409,22 @@ async fn authenticate(client : &Client, request : &Request<()>) -> anyhow::Resul
     }
 }
 
-async fn initialize(client : &Client, request : &Request<()>) -> anyhow::Result<Response<()>> {
-    let response = authenticate(client, request).await?;
+async fn initialize(request : &Request<()>) -> anyhow::Result<Response<()>> {
+    use simple_postgres::*;
+
+    let connection = Connection::new(&load_connection_string()?);
+
+    let response = authenticate(&connection, request).await?;
 
     if response.status() != StatusCode::OK {
         return Ok(response);
     }
 
-    create_default_high_scores(client).await?;
+    create_default_high_scores(&connection).await?;
 
     let sql = include_str!("main.sql");
 
-    client
-        .batch_execute(sql)
-        .await?;
+    query!(connection, sql)?;
 
     let response = Response::builder()
         .status(StatusCode::OK)
@@ -517,6 +528,7 @@ async fn inner_main() -> Result<(), anyhow::Error> {
     match (request.method().as_str(), request.uri().path()) {
         ("GET", "/api/session-id/new") => { print_output(&new_session_id().await)?; return Ok(()); },
         ("POST", "/api/score/new") => { print_output(&new_score_http(&deserialize(request)?).await)?; return Ok(()) },
+        ("POST", "/api/admin/initialize") => { print_output(&initialize(&deserialize(request)?).await)?; return Ok(()) }
         _ => ()
     };
 
@@ -536,7 +548,6 @@ async fn inner_main() -> Result<(), anyhow::Error> {
         ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await)?,
         ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await)?,
         ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await)?,
-        ("POST", "/api/admin/initialize") => print_output(&initialize(&client, &deserialize(request)?).await)?,
         _ => print_output(&Ok(Response::builder().status(StatusCode::NOT_FOUND).body(())?))?
     };
 

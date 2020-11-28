@@ -28,6 +28,22 @@ impl SqlParam for &str {
     }
 }
 
+impl SqlParam for String {
+    fn r#type(&self) -> libpq::Oid {
+        return libpq::types::CSTRING.oid;
+    }
+
+    fn value(&self) -> Option<Vec<u8>> {
+        let mut result : Vec<u8> = self.as_bytes().iter().cloned().collect();
+        result.push(0);
+        return Some(result);
+    }
+
+    fn format(&self) -> libpq::Format {
+        return libpq::Format::Text;
+    }
+}
+
 impl SqlParam for uuid::Uuid {
     fn r#type(&self) -> libpq::Oid {
         return libpq::types::UUID.oid;
@@ -128,10 +144,6 @@ impl Connection {
         where T: for<'de> serde::Deserialize<'de> {
         use libpq::*;
 
-        let _status = self.connection.status();
-
-        let _error = self.connection.error_message();
-
         let result = self.connection.exec_params(
             sql_query,
             &param_types,
@@ -139,7 +151,42 @@ impl Connection {
             &param_formats,
             Format::Text);
 
-        let _status = result.status();
+        let sql_state = result.error_field(result::ErrorField::Sqlstate);
+
+        if let Some(sql_state) = sql_state {
+            if sql_state_from_code(sql_state) != SqlState::SuccessfulCompletion {
+
+                let message_primary = result.error_field(result::ErrorField::MessagePrimary).unwrap();
+                let message_detail = result.error_field(result::ErrorField::MessageDetail);
+
+                let details = if let Some(message_detail) = message_detail {
+                    format!("{}\n{}", message_primary, message_detail)
+                }
+                else {
+                    message_primary.to_string()
+                };
+
+                let error = Error {
+                    sql_state: sql_state_from_code(sql_state),
+                    details: details
+                };
+
+                return Err(error);
+            }
+        }
+
+        let result : T = crate::de::from_result(&result).unwrap();
+
+        return Ok(result);
+    }
+
+    pub fn multi_query<T>(
+        &self,
+        sql_query : &str) -> std::result::Result<T, Error>
+        where T: for<'de> serde::Deserialize<'de> {
+        use libpq::*;
+
+        let result = self.connection.exec(sql_query);
 
         let sql_state = result.error_field(result::ErrorField::Sqlstate);
 
@@ -174,7 +221,7 @@ impl Connection {
 #[macro_export]
 macro_rules! query {
     ($connection:expr, $sql_query:expr) => {
-        $connection.query($sql_query, &[], &[], &[])
+        $connection.multi_query($sql_query)
     };
 
     ($connection:expr, $sql_query:expr, $($params:expr),*) => {
