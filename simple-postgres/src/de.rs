@@ -5,7 +5,7 @@ use serde::de::{
     /* VariantAccess,*/ Visitor,
 };
 
-use crate::error::{Error, Result};
+use crate::error::{SqlState, Error, Result};
 
 pub struct Deserializer<'de> {
     row_index: usize,
@@ -41,7 +41,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        Err(Error::DeserializeAnyNotSupported)
+        Err(Error::from_sql_state(SqlState::DeserializeErrorAnyNotSupported))
     }
 
     // Uses the `parse_bool` parsing function defined above to read the JSON
@@ -79,7 +79,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
                 "no" => false,
                 "n" => false,
                 "0" => false,
-                _ => return Err(Error::ExpectedBoolean)
+                _ => return Err(Error::from_sql_state(SqlState::DeserializeErrorExpectedBoolean))
             };
 
             visitor.visit_bool(value)
@@ -204,10 +204,22 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             match value {
                 Some(value) => {
                     let value = std::str::from_utf8(value).unwrap();
-                    return visitor.visit_string(value.to_owned());
+
+                    if self.result.field_type(self.col_index) == libpq::types::TIMESTAMPTZ.oid {
+                        if let Ok(datetime) = chrono::DateTime::parse_from_str(value, " %Y-%m-%d %H:%M:%S%.f%#z") {
+                            return visitor.visit_string(datetime.to_rfc3339());
+                        }
+                        else {
+                            use serde::de::Error;
+                            return Err(Error::custom("invalid date format"));
+                        }
+                    }
+                    else {
+                        return visitor.visit_string(value.to_owned());
+                    }
                 },
                 None => {
-                    return Err(Error::UnexpectedNull { row: self.row_index, col: self.col_index });
+                    return Err(Error::from_sql_state(SqlState::DeserializeErrorUnexpectedNull));
                 }
             }
         }
@@ -255,18 +267,30 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     // In Serde, unit means an anonymous value containing no data.
-    fn deserialize_unit<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        // if self.input.starts_with("null") {
-        //     self.input = &self.input["null".len()..];
-        //     visitor.visit_unit()
-        // } else {
-        //     Err(Error::ExpectedNull)
-        // }
+        if self.result.nfields() == 0 || self.result.ntuples() == 0 {
+            visitor.visit_unit()
+        }
+        else {
+            let fformat = self.result.field_format(self.col_index);
 
-        unimplemented!()
+            if fformat == libpq::Format::Text {
+                let value = self.result.value(self.row_index, self.col_index);
+
+                if value == None {
+                    visitor.visit_unit()
+                }
+                else {
+                    return Err(Error::from_sql_state(SqlState::DeserializeErrorExpectedNull));
+                }
+            }
+            else {
+                unimplemented!()
+            }
+        }
     }
 
     // Unit struct means a named value containing no data.

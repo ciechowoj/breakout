@@ -8,6 +8,7 @@ use std::str;
 use tokio_postgres::{Client, NoTls};
 use tokio_postgres::error::SqlState;
 use serde::{de};
+use serde::{Serialize, Deserialize};
 use chrono::{Utc};
 use uuid::Uuid;
 use apilib::*;
@@ -17,24 +18,6 @@ use http::header::*;
 use hex;
 use base64;
 use rand::prelude::*;
-
-// GET /api/score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
-// POST /api/score/add { "player": "Maxymilian TheBest", "score": 1000 }
-
-// POST /api/score/new (score : i64) -> uuid top 9 + id
-// POST /api/score/rename (id : uuid, player : String) -> ()
-
-// POST /api/session/new -> "<uuid>"
-// POST /api/session/heartbeat -> 200 OK
-
-/*#[derive(Serialize, Deserialize, Debug)]
-pub struct Request {
-    method : String,
-    uri : String,
-    path : String,
-    query : String,
-    content : String
-}*/
 
 fn get_request() -> anyhow::Result<Request<String>> {
     const CONTENT_LENGTH : &'static str = "CONTENT_LENGTH";
@@ -231,7 +214,9 @@ async fn create_default_high_scores(client : &Client) -> anyhow::Result<()> {
     return Ok(());
 }
 
-async fn new_score_http(client : &Client, request : &Request<NewScoreRequest>) -> anyhow::Result<Response<NewScoreResponse>> {
+async fn new_score_http(request : &Request<NewScoreRequest>) -> anyhow::Result<Response<NewScoreResponse>> {
+    use simple_postgres::*;
+
     let body = &request.body();
 
     let mut decoded_session_id = [0u8; 32];
@@ -256,46 +241,58 @@ async fn new_score_http(client : &Client, request : &Request<NewScoreRequest>) -
         return Ok(response);
     }
 
-    create_high_scores_table(client).await?;
+    // create_high_scores_table(client).await?;
 
     let id = Uuid::from_slice(&decoded_session_id[16..])?;
 
     let utc_now = Utc::now();
 
-    let result = client.execute(
-        "INSERT INTO high_scores(id, name, score, created_time)
-         VALUES ($1, $2, $3, $4);", &[&id, &"", &body.score, &utc_now]).await;
+    let connection = Connection::new(&load_connection_string()?);
+
+    let result : std::result::Result<(), simple_postgres::Error>  = query!(
+        connection,
+        "INSERT INTO high_scores(id, name, score, created_time) VALUES ($1, $2, $3, $4);",
+        id,
+        "",
+        body.score,
+        utc_now);
 
     if let Err(error) = result {
-        if let Some(code) = error.code() {
-            if *code == SqlState::UNIQUE_VIOLATION {
-                let response = Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(NewScoreResponse::Error("Session id cannot be reused!".to_owned()))?;
+        if error.sql_state == simple_postgres::SqlState::UniqueViolation {
+            let response = Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(NewScoreResponse::Error("Session id cannot be reused!".to_owned()))?;
 
-                return Ok(response);
-            }
+            return Ok(response);
         }
     }
 
-    let rows = client
-        .query("SELECT * FROM select_adjacent_scores($1, $2);", &[&id, &body.limit])
-        .await?;
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Row {
+        pub index : i64,
+        pub id : Uuid,
+        pub name : String,
+        pub score : i64
+    }
+
+    let rows : Vec<Row> = query!(
+        connection,
+        "SELECT * FROM select_adjacent_scores($1, $2);",
+         id,
+         body.limit)?;
 
     let mut scores = Vec::<PlayerScore>::new();
     let mut index = -1i64;
 
-    for itr in rows.iter() {
-        let row_index = itr.get::<&str, i64>("index") - 1i64;
-
+    for row in rows {
         scores.push(PlayerScore {
-            index: row_index,
-            name: itr.get("name"),
-            score: itr.get("score")
+            index: row.index - 1i64,
+            name: row.name,
+            score: row.score
         });
 
-        if itr.get::<&str, Uuid>("id") == id {
-            index = row_index
+        if row.id == id {
+            index = row.index - 1i64
         }
     }
 
@@ -471,7 +468,7 @@ fn log_error<S: AsRef<str> + std::fmt::Display>(message : S) {
     };
 
     if use_stderr {
-        eprintln!("{}", message);
+        eprintln!("[error] {}", message);
     }
     else {
         let mut file = std::fs::OpenOptions::new()
@@ -519,6 +516,7 @@ async fn inner_main() -> Result<(), anyhow::Error> {
     // Database connection not required.
     match (request.method().as_str(), request.uri().path()) {
         ("GET", "/api/session-id/new") => { print_output(&new_session_id().await)?; return Ok(()); },
+        ("POST", "/api/score/new") => { print_output(&new_score_http(&deserialize(request)?).await)?; return Ok(()) },
         _ => ()
     };
 
@@ -537,7 +535,6 @@ async fn inner_main() -> Result<(), anyhow::Error> {
     match (request.method().as_str(), request.uri().path()) {
         ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await)?,
         ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await)?,
-        ("POST", "/api/score/new") => print_output(&new_score_http(&client, &deserialize(request)?).await)?,
         ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await)?,
         ("POST", "/api/admin/initialize") => print_output(&initialize(&client, &deserialize(request)?).await)?,
         _ => print_output(&Ok(Response::builder().status(StatusCode::NOT_FOUND).body(())?))?
@@ -548,13 +545,6 @@ async fn inner_main() -> Result<(), anyhow::Error> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-
-    let status = simple_postgres::query();
-    log_error(status);
-
-
-    return Ok(());
-
     let result = inner_main().await;
 
     return match result {

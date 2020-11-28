@@ -263,7 +263,6 @@ fn assert_json_eq(a : &str, b : &str) {
     assert_eq!(a.as_str(), b.as_str());
 }
 
-// ("GET", "/api/session-id/new")
 #[tokio::test]
 async fn new_session_id_test() -> Result<(), Box<dyn std::error::Error>> {
     let actual : Response<Option<String>> = issue_api_request("new_session_id_test", "GET", "/api/session-id/new", r#""#)?;
@@ -275,8 +274,6 @@ async fn new_session_id_test() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// GET score/list -> [ { "player": "Maxymilian TheBest", "score": 1000 }, {}, ... ]
-// POST score/add { "player": "Maxymilian TheBest", "score": 1000 }
 #[tokio::test]
 async fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     let body : &mut dyn FnMut(&Client) -> Result<(), Box<dyn std::error::Error>> = &mut |_| {

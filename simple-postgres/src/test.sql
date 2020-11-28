@@ -12,3 +12,6 @@ INSERT INTO test_string VALUES ('Hello, world!');
 
 CREATE TABLE test_tuple1 (a  VARCHAR(128), b VARCHAR(128));
 INSERT INTO test_tuple1 VALUES ('Hello!', 'World!');
+
+CREATE TABLE unique_constraint (id int PRIMARY KEY);
+INSERT INTO unique_constraint VALUES (42);

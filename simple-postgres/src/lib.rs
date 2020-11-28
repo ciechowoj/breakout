@@ -1,12 +1,12 @@
 mod de;
 mod error;
-mod statement;
+pub mod statement;
 
 pub use de::{Deserializer};
 
-use serde::Deserialize;
+pub use error::*;
 
-trait SqlParam {
+pub trait SqlParam {
     fn r#type(&self) -> libpq::Oid;
     fn value(&self) -> Option<Vec<u8>>;
     fn format(&self) -> libpq::Format;
@@ -21,6 +21,55 @@ impl SqlParam for &str {
         let mut result : Vec<u8> = self.as_bytes().iter().cloned().collect();
         result.push(0);
         return Some(result);
+    }
+
+    fn format(&self) -> libpq::Format {
+        return libpq::Format::Text;
+    }
+}
+
+impl SqlParam for uuid::Uuid {
+    fn r#type(&self) -> libpq::Oid {
+        return libpq::types::UUID.oid;
+    }
+
+    fn value(&self) -> Option<Vec<u8>> {
+        let mut buffer = uuid::Uuid::encode_buffer();
+        let string = self.to_hyphenated().encode_lower(&mut buffer);
+        let mut result : Vec<u8> = string.as_bytes().iter().cloned().collect();
+        result.push(0);
+        return Some(result);
+    }
+
+    fn format(&self) -> libpq::Format {
+        return libpq::Format::Text;
+    }
+}
+
+impl SqlParam for chrono::DateTime<chrono::Utc> {
+    fn r#type(&self) -> libpq::Oid {
+        return libpq::types::TIMESTAMPTZ.oid;
+    }
+
+    fn value(&self) -> Option<Vec<u8>> {
+        let string = self.to_rfc3339();
+        let mut result : Vec<u8> = string.as_bytes().iter().cloned().collect();
+        result.push(0);
+        return Some(result);
+    }
+
+    fn format(&self) -> libpq::Format {
+        return libpq::Format::Text;
+    }
+}
+
+impl SqlParam for () {
+    fn r#type(&self) -> libpq::Oid {
+        return libpq::types::ANY.oid;
+    }
+
+    fn value(&self) -> Option<Vec<u8>> {
+        return None;
     }
 
     fn format(&self) -> libpq::Format {
@@ -59,157 +108,76 @@ impl_sql_param_for_int!(i16, libpq::types::INT2.oid);
 impl_sql_param_for_int!(i32, libpq::types::INT4.oid);
 impl_sql_param_for_int!(i64, libpq::types::INT8.oid);
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Error {
-    Overflow
+pub struct Connection {
+    connection : libpq::Connection
 }
 
-pub fn query<T>(
-    connection_string : &str,
-    sql_query : &str,
-    param_types : &[libpq::Oid],
-    param_values: &[Option<Vec<u8>>],
-    param_formats: &[libpq::Format]) -> std::result::Result<T, Error>
-    where T: for<'de> serde::Deserialize<'de> {
-    use libpq::*;
+impl Connection {
+    pub fn new(connection_string : &str) -> Self {
+        return Connection {
+            connection : libpq::Connection::new(connection_string).unwrap()
+        }
+    }
 
-    let connection = Connection::new(connection_string).unwrap();
+    pub fn query<T>(
+        &self,
+        sql_query : &str,
+        param_types : &[libpq::Oid],
+        param_values: &[Option<Vec<u8>>],
+        param_formats: &[libpq::Format]) -> std::result::Result<T, Error>
+        where T: for<'de> serde::Deserialize<'de> {
+        use libpq::*;
 
-    let _status = connection.status();
+        let _status = self.connection.status();
 
-    let _error = connection.error_message();
+        let _error = self.connection.error_message();
 
-    // println!("{:?} {:?}", status, error);
+        let result = self.connection.exec_params(
+            sql_query,
+            &param_types,
+            &param_values,
+            &param_formats,
+            Format::Text);
 
-    // let result = connection.exec(sql_query);
+        let _status = result.status();
 
-    let result = connection.exec_params(
-        sql_query,
-        &param_types,
-        &param_values,
-        &param_formats,
-        Format::Text);
+        let sql_state = result.error_field(result::ErrorField::Sqlstate);
 
-    let _status = result.status();
+        if let Some(sql_state) = sql_state {
+            if sql_state_from_code(sql_state) != SqlState::SuccessfulCompletion {
 
-    // println!("{:?} {:?}", status, result.error_message());
+                let message_primary = result.error_field(result::ErrorField::MessagePrimary).unwrap();
+                let message_detail = result.error_field(result::ErrorField::MessageDetail);
 
-    let result : T = crate::de::from_result(&result).unwrap();
+                let details = if let Some(message_detail) = message_detail {
+                    format!("{}\n{}", message_primary, message_detail)
+                }
+                else {
+                    message_primary.to_string()
+                };
 
-    drop(connection);
+                let error = Error {
+                    sql_state: sql_state_from_code(sql_state),
+                    details: details
+                };
 
-    return Ok(result);
+                return Err(error);
+            }
+        }
+
+        let result : T = crate::de::from_result(&result).unwrap();
+
+        return Ok(result);
+    }
 }
 
 #[macro_export]
 macro_rules! query {
-    ($connection_string:expr, $sql_query:expr) => {
-        query($connection_string, $sql_query, &[], &[], &[])
+    ($connection:expr, $sql_query:expr) => {
+        $connection.query($sql_query, &[], &[], &[])
     };
 
-    ($connection_string:expr, $sql_query:expr, $($params:expr),*) => {
-        query($connection_string, $sql_query, &[ $( $params.r#type() ),* ], &[ $( $params.value() ),* ], &[ $( $params.format() ),* ])
+    ($connection:expr, $sql_query:expr, $($params:expr),*) => {
+        $connection.query($sql_query, &[ $( SqlParam::r#type(&$params) ),* ], &[ $( SqlParam::value(&$params) ),* ], &[ $( SqlParam::format(&$params) ),* ])
     };
 }
-
-#[cfg(test)]
-mod tests {
-    const CONNECTION_STRING : &'static str = "host=localhost user=testuser dbname=testdb password=password";
-
-    use crate::*;
-
-    #[test]
-    fn test_basic_types_params() {
-        let value : String = query!(CONNECTION_STRING, "SELECT $1;", "Hello, world!").unwrap();
-        assert_eq!("Hello, world!".to_owned() , value);
-
-        let value : (String, String) = query!(CONNECTION_STRING, "SELECT $1, $2;", "Hello!", "World?").unwrap();
-        assert_eq!(("Hello!".to_owned(), "World?".to_owned()), value);
-
-        let value : (u8, u16, u32, u64) = query!(CONNECTION_STRING, "SELECT $1, $2, $3, $4;", 8u8, 16u16, 32u32, 64u64).unwrap();
-        assert_eq!((8, 16, 32, 64), value);
-
-        let value : (i8, i16, i32, i64) = query!(CONNECTION_STRING, "SELECT $1, $2, $3, $4;", 8i8, 16i16, 32i32, 64i64).unwrap();
-        assert_eq!((8, 16, 32, 64), value);
-
-        let value : (bool, bool, bool, bool, bool, bool) = query!(CONNECTION_STRING, "SELECT true, 't', 'true', 'y', 'yes', '1';").unwrap();
-        assert_eq!((true, true, true, true, true, true), value);
-
-        let value : (bool, bool, bool, bool, bool, bool) = query!(CONNECTION_STRING, "SELECT false, 'f', 'false', 'n', 'no', '0';").unwrap();
-        assert_eq!((false, false, false, false, false, false), value);
-    }
-
-    #[test]
-    fn test_chrono_params() {
-        let value : chrono::DateTime<chrono::Utc> = query!(CONNECTION_STRING, "SELECT $1;", "2014-11-28T21:45:59.324310806+09:00").unwrap();
-        assert_eq!(chrono::DateTime::<chrono::FixedOffset>::parse_from_rfc3339("2014-11-28T21:45:59.324310806+09:00").unwrap().with_timezone(&chrono::Utc), value);
-    }
-
-    #[test]
-    fn test_uuid_params() {
-        let value : uuid::Uuid = query!(CONNECTION_STRING, "SELECT $1;", "936DA01F-9ABD-4D9D-80C7-02AF85C822A8").unwrap();
-        assert_eq!(uuid::Uuid::parse_str("936DA01F-9ABD-4D9D-80C7-02AF85C822A8").unwrap(), value);
-    }
-
-    #[test]
-    fn query_i64() {
-        let value : i64 = query!(CONNECTION_STRING, "SELECT * FROM test_i64;").unwrap();
-        assert_eq!(42i64, value);
-    }
-
-    #[test]
-    fn query_vec_i64() {
-        let value : Vec<i64> = query!(CONNECTION_STRING, "SELECT * FROM test_vec_i64;").unwrap();
-        assert_eq!(vec!(1i64, 2i64, 3i64), value);
-    }
-
-    #[test]
-    fn query_struct1() {
-        #[derive(Debug, Deserialize, PartialEq)]
-        struct Test {
-            a: i64,
-            b: i64
-        };
-
-        let value : Vec<Test> = query!(CONNECTION_STRING, "SELECT * FROM test_struct1;").unwrap();
-        assert_eq!(vec!(Test { a: 1, b: 2 }, Test { a: 3, b: 4 }, Test { a: 5, b: 6 }), value);
-    }
-
-    #[test]
-    fn query_string() {
-        let value : String = query!(CONNECTION_STRING, "SELECT * FROM test_string;").unwrap();
-        assert_eq!("Hello, world!", value);
-    }
-
-    #[test]
-    fn query_tuple1() {
-        let value : (String, String) = query!(CONNECTION_STRING, "SELECT * FROM test_tuple1;").unwrap();
-        assert_eq!(("Hello!".to_owned(), "World!".to_owned()), value);
-    }
-
-    #[test]
-    fn query_tuple2() {
-        #[derive(Debug, Deserialize, PartialEq)]
-        struct TupleStruct(String, String);
-        let value : TupleStruct = query!(CONNECTION_STRING, "SELECT * FROM test_tuple1;").unwrap();
-        assert_eq!(TupleStruct("Hello!".to_owned(), "World!".to_owned()), value);
-    }
-
-    #[test]
-    fn query_newtype_struct() {
-        #[derive(Debug, Deserialize, PartialEq)]
-        struct NewtypeStruct(i64);
-        let value : NewtypeStruct = query!(CONNECTION_STRING, "SELECT * FROM test_i64;").unwrap();
-        assert_eq!(NewtypeStruct(42i64), value);
-    }
-
-    /*#[test]
-    fn query_multiple_statements() {
-        let value : Vec<i64> = query(CONNECTION_STRING, "SELECT * FROM test_vec_i64; SELECT * FROM test_vec_i64;");
-        assert_eq!(vec!(1i64, 2i64, 3i64, 1i64, 2i64, 3i64), value);
-    }*/
-
-
-}
-
-
