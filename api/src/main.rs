@@ -5,8 +5,6 @@ use std::io::Read;
 use std::io::prelude::*;
 use std::str::FromStr;
 use std::str;
-use tokio_postgres::{Client, NoTls};
-use tokio_postgres::error::SqlState;
 use serde::{de};
 use serde::{Deserialize};
 use chrono::{Utc};
@@ -67,34 +65,41 @@ fn get_session_id_salt() -> anyhow::Result<[u8; 32]> {
     return Ok(bytes);
 }
 
-async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest>) -> anyhow::Result<Response<Vec<PlayerScore>>> {
+async fn list_scores_http(request : &Request<ListScoresRequest>) -> anyhow::Result<Response<Vec<PlayerScore>>> {
+    use simple_postgres::*;
+
     let body = request.body();
 
-    let result = if let Some(limit) = body.limit {
-        client
-            .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score
-                    FROM high_scores
-                    ORDER BY score DESC
-                    LIMIT $1;", &[&limit])
-            .await
+    let connection = Connection::new(&load_connection_string()?);
+
+    #[derive(Debug, Deserialize)]
+    struct Row {
+        pub row_number : i64,
+        pub name : String,
+        pub score : i64
+    }
+
+    let result : std::result::Result<Vec<Row>, simple_postgres::Error> = if let Some(limit) = body.limit {
+        query!(
+            connection,
+            "SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score
+            FROM high_scores
+            ORDER BY score DESC
+            LIMIT $1;",
+            limit)
     }
     else {
-        client
-            .query("SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score
-                    FROM high_scores
-                    ORDER BY score DESC;", &[])
-            .await
+        query!(
+            connection,
+            "SELECT ROW_NUMBER() OVER (ORDER BY score DESC), name, score
+            FROM high_scores
+            ORDER BY score DESC;")
     };
 
     let scores = match result {
         Err(error) => {
-            if let Some(code) = error.code() {
-                if *code == SqlState::UNDEFINED_TABLE {
-                    Ok(Vec::<PlayerScore>::new())
-                }
-                else {
-                    Err(error)
-                }
+            if error.sql_state == SqlState::UndefinedTable {
+                Ok(Vec::<PlayerScore>::new())
             }
             else {
                 Err(error)
@@ -103,8 +108,9 @@ async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest
         Ok(rows) => {
             let scores = rows.iter()
                 .map(|row| PlayerScore {
-                    index: row.get::<&str, i64>("row_number") - 1,
-                    name: row.get("name"), score: row.get("score")
+                    index: row.row_number - 1,
+                    name: row.name.clone(),
+                    score: row.score
                 })
                 .collect();
             Ok(scores)
@@ -223,8 +229,6 @@ async fn new_score_http(request : &Request<NewScoreRequest>) -> anyhow::Result<R
         return Ok(response);
     }
 
-    // create_high_scores_table(client).await?;
-
     let id = Uuid::from_slice(&decoded_session_id[16..])?;
 
     let utc_now = Utc::now();
@@ -293,13 +297,20 @@ async fn new_score_http(request : &Request<NewScoreRequest>) -> anyhow::Result<R
     return Ok(response);
 }
 
-async fn rename_score_http(client : &Client, request : &Request<RenameScoreRequest>) -> anyhow::Result<Response<()>> {
+async fn rename_score_http(request : &Request<RenameScoreRequest>) -> anyhow::Result<Response<()>> {
+    use simple_postgres::*;
+
+    let connection = Connection::new(&load_connection_string()?);
+
     let body = &request.body();
 
-    client.execute(
+    query!(
+        connection,
         "UPDATE high_scores
-            SET name = $1
-            WHERE id = $2;", &[&body.name, &body.id]).await?;
+        SET name = $1
+        WHERE id = $2;",
+        body.name,
+        body.id)?;
 
     let response = Response::builder()
         .status(StatusCode::OK)
@@ -505,28 +516,12 @@ async fn inner_main() -> Result<(), anyhow::Error> {
 
     // Database connection not required.
     match (request.method().as_str(), request.uri().path()) {
-        ("GET", "/api/session-id/new") => { print_output(&new_session_id().await)?; return Ok(()); },
-        ("POST", "/api/score/new") => { print_output(&new_score_http(&deserialize(request)?).await)?; return Ok(()) },
-        ("POST", "/api/admin/initialize") => { print_output(&initialize(&deserialize(request)?).await)?; return Ok(()) }
+        ("GET", "/api/session-id/new") => print_output(&new_session_id().await)?,
+        ("POST", "/api/score/new") => print_output(&new_score_http(&deserialize(request)?).await)?,
+        ("POST", "/api/admin/initialize") => print_output(&initialize(&deserialize(request)?).await)?,
+        ("POST", "/api/score/list") => print_output(&list_scores_http(&deserialize(request)?).await)?,
+        ("POST", "/api/score/rename") => print_output(&rename_score_http(&deserialize(request)?).await)?,
         _ => ()
-    };
-
-    // Database connection required.
-    let connection_string = load_connection_string()?;
-
-    let (client, connection) =
-        tokio_postgres::connect(connection_string.as_ref(), NoTls).await?;
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            log_error(format!("connection error: {}", e));
-        }
-    });
-
-    match (request.method().as_str(), request.uri().path()) {
-        ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await)?,
-        ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await)?,
-        _ => print_output(&Ok(Response::builder().status(StatusCode::NOT_FOUND).body(())?))?
     };
 
     Ok(())
