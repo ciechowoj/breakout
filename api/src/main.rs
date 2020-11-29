@@ -67,27 +67,6 @@ fn get_session_id_salt() -> anyhow::Result<[u8; 32]> {
     return Ok(bytes);
 }
 
-async fn add_score(client : &Client, request : &Request<AddScoreRequest>) -> anyhow::Result<Response<()>> {
-    client.execute(
-        "CREATE TABLE IF NOT EXISTS high_scores (
-            id uuid PRIMARY KEY,
-            name varchar(128) NOT NULL,
-            score bigint,
-            created_time timestamptz);", &[]).await?;
-
-    let body = &request.body();
-
-    client.execute(
-        "INSERT INTO high_scores(id, name, score, created_time)
-        VALUES ($1, $2, $3, $4);", &[&Uuid::new_v4(), &body.name, &body.score, &Utc::now()]).await?;
-
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .body(())?;
-
-    return Ok(response);
-}
-
 async fn list_scores_http(client : &Client, request : &Request<ListScoresRequest>) -> anyhow::Result<Response<Vec<PlayerScore>>> {
     let body = request.body();
 
@@ -546,7 +525,6 @@ async fn inner_main() -> Result<(), anyhow::Error> {
 
     match (request.method().as_str(), request.uri().path()) {
         ("POST", "/api/score/list") => print_output(&list_scores_http(&client, &deserialize(request)?).await)?,
-        ("POST", "/api/score/add") => print_output(&add_score(&client, &deserialize(request)?).await)?,
         ("POST", "/api/score/rename") => print_output(&rename_score_http(&client, &deserialize(request)?).await)?,
         _ => print_output(&Ok(Response::builder().status(StatusCode::NOT_FOUND).body(())?))?
     };
