@@ -135,7 +135,7 @@ pub fn collapse_scoreboard_input_html(overlay : &HtmlElement) -> anyhow::Result<
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
     let scoreboard_input = document.get_element_by_id("score-board-input");
-    let parent = scoreboard_input.unwrap().parent_element();
+    let parent = scoreboard_input.map(|input| input.parent_element().unwrap());
 
     match parent {
         Some(parent) => {

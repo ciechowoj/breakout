@@ -2,7 +2,6 @@ extern crate nalgebra_glm as glm;
 mod event;
 #[macro_use]
 pub mod utils;
-mod js_utils;
 mod game;
 mod collision;
 mod webapi;
@@ -19,7 +18,6 @@ use web_sys::*;
 use event::*;
 use utils::*;
 use game::*;
-use crate::js_utils::*;
 use glm::vec2;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -94,7 +92,7 @@ fn update_dynamic_fonts(width : i32) {
     let fonts_css = document.get_element_by_id("font-css");
 
     if let Some(style) = fonts_css {
-        let style : HtmlStyleElement = style.xdyn_into();
+        let style : HtmlStyleElement = style.unchecked_into();
 
         style.set_inner_html(&sheet);
     }
@@ -278,7 +276,7 @@ pub async fn wasm_main() {
                 .get_context("2d")
                 .unwrap()
                 .unwrap()
-                .xdyn_into();
+                .unchecked_into();
 
             let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
                 if let Some(_) = js_value.as_f64() {
