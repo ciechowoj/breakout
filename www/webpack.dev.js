@@ -16,6 +16,11 @@ module.exports = merge(common, {
           blocking: true,
           parallel: false
         },
+        onBuildEnd:{
+          scripts: ['chmod +x ./dist/api'],
+          blocking: true,
+          parallel: false
+        }
       }),
     new CopyWebpackPlugin({
         patterns: [
