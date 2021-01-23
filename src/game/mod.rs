@@ -2,13 +2,12 @@ mod bat;
 mod ball;
 mod bricks;
 mod config;
-mod utils;
+pub mod utils;
 mod scoreboard;
 
 use glm::*;
 use crate::event::*;
 use crate::utils::*;
-use crate::dom_utils::*;
 use crate::game::bricks::*;
 use crate::game::bat::*;
 use crate::game::ball::*;
@@ -19,6 +18,7 @@ use std::include_str;
 use std::rc::Rc;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::{JsCast};
 use web_sys::*;
 
 #[allow(dead_code)]
@@ -113,13 +113,15 @@ pub fn init_overlay(
     _time : f64) -> anyhow::Result<()> {
 
     let document = overlay.owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
-    create_style_element(&document, include_str!("game.css"), "game-css")?;
+    utils::create_style_element(&document, include_str!("game.css"), "game-css")?;
 
-    let score = create_html_element(&document, "span", "footer-score")?;
+    let score : HtmlElement = document.create_element("span").unwrap().unchecked_into();
+    score.set_id("footer-score");
     score.set_inner_html("0");
     overlay.append_child(&score).to_anyhow()?;
 
-    let lives = create_html_element(&document, "span", "footer-lives")?;
+    let lives : HtmlElement = document.create_element("span").unwrap().unchecked_into();
+    lives.set_id("footer-lives");
     lives.set_inner_html("");
     overlay.append_child(&lives).to_anyhow()?;
 
@@ -134,7 +136,7 @@ pub fn update_game_over(
         .owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
     let game_over_id = "game-over";
-    let game_over = try_get_html_element_by_id(&document, game_over_id)?;
+    let game_over = document.get_element_by_id(game_over_id);
 
     match game_over {
         Some(element) => {
@@ -148,7 +150,8 @@ pub fn update_game_over(
         None => {
             match game_state.stage {
                 GameStage::GameOver => {
-                    let game_over = create_html_element(&document, "div", game_over_id)?;
+                    let game_over : HtmlElement = document.create_element("div").unwrap().unchecked_into();
+                    game_over.set_id(game_over_id);
                     game_over.set_inner_html("<span>Game Over</span>");
                     overlay.append_child(&game_over).to_anyhow()?;
                 },
@@ -169,7 +172,7 @@ pub fn update_score_board(
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
     let score_board_id = "score-board";
-    let score_board = try_get_html_element_by_id(&document, score_board_id)?;
+    let score_board = document.get_element_by_id(score_board_id);
 
     match score_board {
         Some(element) => {
@@ -202,8 +205,8 @@ pub fn update_overlay(
         .owner_document()
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
-    let score = get_html_element_by_id(&document, "footer-score")?;
-    let lives = get_html_element_by_id(&document, "footer-lives")?;
+    let score : HtmlElement = document.get_element_by_id("footer-score").unwrap().unchecked_into();
+    let lives : HtmlElement = document.get_element_by_id("footer-lives").unwrap().unchecked_into();
 
     match game_state.stage {
         GameStage::Gameplay | GameStage::GameOver => {
@@ -250,8 +253,10 @@ pub fn update(
                         match game_state.stage {
                             GameStage::ScoreBoard => {
                                 if let Some(name) = player_name()? {
+                                    let window = web_sys::window().unwrap();
 
-                                    if crate::dom_utils::window().confirm_with_message(
+
+                                    if window.confirm_with_message(
                                         "Are you sure you want to post you score and nickname? The record cannot be changed or removed.")
                                         .unwrap() {
                                         persist_score(overlay.clone(), name, *game_state.score_id.borrow())?;

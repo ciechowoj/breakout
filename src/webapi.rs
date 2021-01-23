@@ -5,7 +5,6 @@ use web_sys;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use apilib::*;
-use crate::dom_utils as browser;
 
 pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<Option<String>>) -> anyhow::Result<http::Response<T>> {
     let mut opts = web_sys::RequestInit::new();
@@ -30,7 +29,7 @@ pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<Option<Strin
         Err(_js_value) => Err(anyhow!("Failed to add accept header!"))
     }?;
 
-    let window = browser::window();
+    let window = web_sys::window().unwrap();
 
     let response = match JsFuture::from(window.fetch_with_request(&request)).await {
         Ok(response) => Ok(response),
@@ -62,7 +61,7 @@ pub async fn fetch<T: de::DeserializeOwned>(request : http::Request<Option<Strin
 }
 
 pub fn build_uri(relative : &'static str) -> String {
-    let location = browser::window().location();
+    let location = web_sys::window().unwrap().location();
     return format!("{}//{}/{}", location.protocol().unwrap(), location.hostname().unwrap(), relative);
 }
 

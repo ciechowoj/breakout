@@ -1,7 +1,6 @@
 use crate::utils::*;
 use web_sys::*;
 use wasm_bindgen::JsCast;
-use crate::dom_utils as browser;
 use crate::webapi::*;
 use crate::executor::*;
 use apilib::*;
@@ -11,7 +10,7 @@ use std::{rc::Rc, cell::RefCell};
 use uuid::Uuid;
 
 pub fn generate_seed() -> anyhow::Result<u64> {
-    let window = browser::window();
+    let window = web_sys::window().unwrap();
 
     let crypto = match window.crypto() {
         Ok(crypto) => Ok(crypto),
@@ -123,7 +122,7 @@ pub async fn create_scoreboard_html(
         .owner_document()
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
-    let score_board = browser::get_html_element_by_id(&document, score_board_id.as_ref())?;
+    let score_board = document.get_element_by_id(score_board_id.as_ref()).unwrap();
     score_board.set_inner_html(scoreboard_str.as_str());
     overlay.append_child(&score_board).to_anyhow()?;
 
@@ -135,12 +134,12 @@ pub fn collapse_scoreboard_input_html(overlay : &HtmlElement) -> anyhow::Result<
         .owner_document()
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
-    let scoreboard_input = browser::get_html_element_by_id(&document, "score-board-input")?;
-    let parent = scoreboard_input.parent_element();
+    let scoreboard_input = document.get_element_by_id("score-board-input");
+    let parent = scoreboard_input.unwrap().parent_element();
 
     match parent {
         Some(parent) => {
-            let parent = browser::into_html_element(parent);
+            let parent : HtmlElement = parent.unchecked_into();
 
             let inner = parent.inner_html();
 
@@ -177,7 +176,9 @@ pub fn create_scoreboard(
         .owner_document()
         .ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
-    let score_board = browser::create_html_element(&document, "div", score_board_id)?;
+    let score_board : HtmlElement = document.create_element("div").unwrap().unchecked_into();
+    score_board.set_id(score_board_id);
+
     overlay.append_child(&score_board).to_anyhow()?;
 
     let future = populate_scoreboard(overlay.clone(), new_score, score_id, score_board_id.to_owned());
@@ -188,10 +189,10 @@ pub fn create_scoreboard(
 }
 
 pub fn player_name() -> anyhow::Result<Option<String>> {
-    let window = browser::window();
+    let window = web_sys::window().unwrap();
     let document = window.document().expect("Failed to get the main document!");
 
-    let input_or_none = browser::try_get_html_element_by_id(&document, "score-board-input")?;
+    let input_or_none = document.get_element_by_id("score-board-input");
 
     if let Some(input) = input_or_none {
         let input = input.dyn_into::<web_sys::HtmlInputElement>()
@@ -208,7 +209,7 @@ pub fn player_name() -> anyhow::Result<Option<String>> {
 }
 
 pub fn _load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScore>>> {
-    let window = browser::window();
+    let window = web_sys::window().unwrap();
 
     let local_storage = window
         .local_storage()
@@ -241,7 +242,7 @@ pub async fn _load_scores() -> anyhow::Result<Vec<PlayerScore>> {
 }
 
 pub fn _save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::Result<()> {
-    let window = browser::window();
+    let window = web_sys::window().unwrap();
 
     let local_storage = window
         .local_storage()

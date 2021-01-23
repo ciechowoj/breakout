@@ -1,8 +1,7 @@
 extern crate nalgebra_glm as glm;
 mod event;
 #[macro_use]
-mod utils;
-mod dom_utils;
+pub mod utils;
 mod js_utils;
 mod game;
 mod collision;
@@ -20,7 +19,6 @@ use web_sys::*;
 use event::*;
 use utils::*;
 use game::*;
-use crate::dom_utils as browser;
 use crate::js_utils::*;
 use glm::vec2;
 
@@ -59,7 +57,7 @@ fn reset_canvas_size(canvas : &HtmlCanvasElement) -> anyhow::Result<()> {
 }
 
 fn update_dynamic_fonts(width : i32) {
-    let document = browser::document();
+    let document = web_sys::window().unwrap().document().unwrap();
 
     let scale = ((if width < 480 { 480 } else { width }) as f32) * 0.012f32;
     let vhuge_font_size = (8.71855f32 * scale) as i32;
@@ -101,17 +99,17 @@ fn update_dynamic_fonts(width : i32) {
         style.set_inner_html(&sheet);
     }
     else {
-        browser::create_style_element(&document, &sheet, "font-css").unwrap();
+        game::utils::create_style_element(&document, &sheet, "font-css").unwrap();
     }
 }
 
 fn update_viewport_size() {
-    let document = browser::document();
+    let document = web_sys::window().unwrap().document().unwrap();
     let root = document
         .document_element()
         .expect("Failed to retrieve reference to the html element.");
 
-    let outer_div = browser::get_html_element_by_id(&document, "outer-div").unwrap();
+    let outer_div : HtmlElement = document.get_element_by_id("outer-div").unwrap().unchecked_into();
 
     let client_width = root.client_width() as f32;
     let client_height = root.client_height() as f32;
@@ -346,18 +344,17 @@ pub async fn wasm_main() {
 
     set_panic_hook();
 
-    let window = browser::window();
+    let window = web_sys::window().unwrap();
 
     let document = window.document().expect("should have a document on window");
     document.set_title("Omg! It works!");
 
-    browser::create_style_element(&document, include_str!("main.css"), "main-css")
+    game::utils::create_style_element(&document, include_str!("main.css"), "main-css")
         .expect("Failed to create main.css.");
 
     let body = document.body().expect("document should have a body");
 
-    let outer_div = document.create_element("div").unwrap();
-    let outer_div = browser::into_html_element(outer_div);
+    let outer_div : HtmlElement = document.create_element("div").unwrap().unchecked_into();
 
     outer_div.set_id("outer-div");
     body.append_child(&outer_div).ok();
@@ -371,12 +368,11 @@ pub async fn wasm_main() {
 
     outer_div.append_child(&canvas).ok();
 
-    let overlay = document.create_element("div").unwrap();
-    let overlay = browser::into_html_element(overlay);
+    let overlay : HtmlElement = document.create_element("div").unwrap().unchecked_into();
     overlay.set_class_name("main-canvas-area");
     outer_div.append_child(&overlay).ok();
 
-    let event_target = EventTarget::from(browser::window());
+    let event_target = EventTarget::from(web_sys::window().unwrap());
 
     let closure : Box<dyn Fn(JsValue)> = Box::new(|_event : JsValue| {
         update_viewport_size();
@@ -444,8 +440,7 @@ pub fn update_fps(
     let document = overlay.owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
 
     if let None = document.get_element_by_id("fps-counter") {
-        let fps_counter = document.create_element("span").unwrap();
-        let fps_counter = browser::into_html_element(fps_counter);
+        let fps_counter : HtmlElement = document.create_element("span").unwrap().unchecked_into();
 
         fps_counter.set_id("fps-counter");
         overlay.append_child(&fps_counter).ok();
