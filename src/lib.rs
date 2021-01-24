@@ -151,7 +151,6 @@ pub async fn wasm_main() {
 
     fn bind_event_handlers(
         document : &Document,
-        canvas : &HtmlCanvasElement,
         overlay : &HtmlElement,
         input_events : Rc<RefCell<Vec<InputEvent>>>,
         update_struct : Rc<Recursive>) {
@@ -179,21 +178,6 @@ pub async fn wasm_main() {
             return Ok(event);
         }
 
-        fn js_to_mousemove_event(js_value : JsValue) -> anyhow::Result<InputEvent> {
-            let offset_x = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetX")).to_anyhow()?;
-            let offset_x = offset_x.as_f64().ok_or(anyhow::anyhow!("Expected 'offsetX' field in MouseEvent!"))?;
-
-            let offset_y = js_sys::Reflect::get(&js_value, &JsValue::from_str("offsetY")).to_anyhow()?;
-            let offset_y = offset_y.as_f64().ok_or(anyhow::anyhow!("Expected 'offsetY' field in MouseEvent!"))?;
-
-            let event = InputEvent::MouseMove {
-                x: offset_x,
-                y: offset_y
-            };
-
-            return Ok(event);
-        }
-
         let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             let event = js_to_keydown_event(js_value).unwrap();
             input_events.borrow_mut().push(event);
@@ -211,16 +195,6 @@ pub async fn wasm_main() {
 
         let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
         document.set_onkeyup(Some(closure.as_ref().unchecked_ref()));
-        closure.forget();
-
-        let update_struct_clone = update_struct.clone();
-        let on_mousemove : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-            let event = js_to_mousemove_event(js_value).unwrap();
-            update_struct_clone.events.borrow_mut().push(event);
-        });
-
-        let closure = Closure::wrap(on_mousemove as Box<dyn FnMut(JsValue)>);
-        canvas.set_onmousemove(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
 
         let on_touchstart : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
@@ -328,7 +302,6 @@ pub async fn wasm_main() {
 
         bind_event_handlers(
             &document,
-            &canvas,
             &overlay,
             update_struct.events.clone(),
             update_struct.clone());

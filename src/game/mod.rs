@@ -274,8 +274,7 @@ pub fn update(
                 }
 
                 log!("{} key released at time {:.2}!", code.as_ref(), time);
-            },
-            InputEvent::MouseMove { x : _, y : _ } => { }
+            }
         }
     }
 

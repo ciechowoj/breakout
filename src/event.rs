@@ -206,9 +206,7 @@ impl TryFrom<JsValue> for Touch {
 
 pub enum InputEvent {
     KeyDown { code : KeyCode },
-    KeyUp { code : KeyCode },
-    MouseMove { x : f64, y : f64 },
-    
+    KeyUp { code : KeyCode }
 }
 
 #[derive(Debug)]
@@ -290,15 +288,14 @@ impl TryFrom<JsValue> for TouchEvent {
             touches.push(Touch::try_from(js_result)?);
         }
 
-        Ok(TouchEvent { 
+        Ok(TouchEvent {
             r#type: TouchEventType::try_from(get_property(&js_value, "type")?)?,
-            touches: touches 
+            touches: touches
         })
     }
 }
 
 pub trait InputEventTarget {
-    fn set_onmousemove(&self, function : Box<dyn FnMut(InputEvent) -> anyhow::Result<()>>);
     fn set_ontouchstart(&self, function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>);
     fn set_ontouchmove(&self, function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>);
     fn set_ontouchend(&self, function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>);
@@ -348,26 +345,6 @@ fn get_property_as_usize(js_value : &JsValue, id : &'static str) -> anyhow::Resu
 }
 
 impl InputEventTarget for HtmlElement {
-    fn set_onmousemove(&self, mut function : Box<dyn FnMut(InputEvent) -> anyhow::Result<()>>) {
-        let closure : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-
-            let offset_x = get_property_as_f64(&js_value, "offsetX").unwrap();
-            let offset_y = get_property_as_f64(&js_value, "offsetY").unwrap();
-
-            let event = InputEvent::MouseMove { 
-                x: offset_x,
-                y: offset_y
-            };
-
-            function(event).unwrap();
-        });
-
-        let closure = Closure::wrap(closure);
-        let result = Some(closure.as_ref().unchecked_ref());
-        HtmlElement::set_onmousemove(&self, result);
-        closure.forget();
-    }
-
     fn set_ontouchstart(&self, mut function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>) {
         let closure : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             function(TouchEvent::try_from(js_value).unwrap()).unwrap();
@@ -378,7 +355,7 @@ impl InputEventTarget for HtmlElement {
         HtmlElement::set_ontouchstart(&self, result);
         closure.forget();
     }
-    
+
     fn set_ontouchmove(&self, mut function : Box<dyn FnMut(TouchEvent) -> anyhow::Result<()>>) {
         let closure : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
             function(TouchEvent::try_from(js_value).unwrap()).unwrap();
@@ -415,7 +392,6 @@ impl InputEventTarget for HtmlElement {
 
 pub struct EventQueues {
     pub keyboard_events : Vec<KeyboardEvent>,
-    pub mouse_events : Vec<MouseEvent>,
     pub touch_events : Vec<TouchEvent>
 }
 
@@ -423,7 +399,6 @@ impl EventQueues {
     pub fn new() -> Rc<RefCell<EventQueues>> {
         let event_queues = EventQueues {
             keyboard_events: Vec::<KeyboardEvent>::new(),
-            mouse_events: Vec::<MouseEvent>::new(),
             touch_events: Vec::<TouchEvent>::new()
         };
 
@@ -449,7 +424,6 @@ impl EventQueues {
     pub fn clear_all_queues(event_queues : &Rc<RefCell<EventQueues>>) {
         let mut event_queues = event_queues.borrow_mut();
         event_queues.keyboard_events.clear();
-        event_queues.mouse_events.clear();
         event_queues.touch_events.clear();
     }
 }
@@ -522,8 +496,7 @@ impl KeyboardState {
         for event in input_events {
             match event {
                 InputEvent::KeyDown { code } => { self.state.insert(*code); },
-                InputEvent::KeyUp { code } => { self.state.remove(code); },
-                _ => ()
+                InputEvent::KeyUp { code } => { self.state.remove(code); }
             }
         }
     }
