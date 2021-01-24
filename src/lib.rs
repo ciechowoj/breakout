@@ -151,7 +151,6 @@ pub async fn wasm_main() {
 
     fn bind_event_handlers(
         document : &Document,
-        overlay : &HtmlElement,
         input_events : Rc<RefCell<Vec<InputEvent>>>,
         update_struct : Rc<Recursive>) {
 
@@ -196,43 +195,6 @@ pub async fn wasm_main() {
         let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
         document.set_onkeyup(Some(closure.as_ref().unchecked_ref()));
         closure.forget();
-
-        let on_touchstart : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
-            for touch in value.touches {
-                log!("on_touchstart: {:?}", touch);
-            }
-
-            return Ok(());
-        });
-
-        let set_ontouchmove : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
-            for touch in value.touches {
-                log!("set_ontouchmove: {:?}", touch);
-            }
-
-            return Ok(());
-        });
-
-        let set_ontouchend : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
-            for touch in value.touches {
-                log!("set_ontouchend: {:?}", touch);
-            }
-
-            return Ok(());
-        });
-
-        let set_ontouchcancel : Box<dyn FnMut(event::TouchEvent) -> anyhow::Result<()>> = Box::new(move |value : event::TouchEvent| -> anyhow::Result<()> {
-            for touch in value.touches {
-                log!("set_ontouchcancel: {:?}", touch);
-            }
-
-            return Ok(());
-        });
-
-        <HtmlElement as InputEventTarget>::set_ontouchstart(overlay.as_ref(), on_touchstart);
-        <HtmlElement as InputEventTarget>::set_ontouchmove(overlay.as_ref(), set_ontouchmove);
-        <HtmlElement as InputEventTarget>::set_ontouchend(overlay.as_ref(), set_ontouchend);
-        <HtmlElement as InputEventTarget>::set_ontouchcancel(overlay.as_ref(), set_ontouchcancel);
     }
 
     fn setup_main_loop(
@@ -302,7 +264,6 @@ pub async fn wasm_main() {
 
         bind_event_handlers(
             &document,
-            &overlay,
             update_struct.events.clone(),
             update_struct.clone());
 
