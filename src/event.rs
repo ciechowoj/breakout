@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom};
 use std::rc::{Rc, Weak};
+use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, AsRefStr, EnumString, PartialEq, Eq, Hash)]
 pub enum KeyCode {
@@ -177,6 +178,13 @@ pub enum KeyCode {
     WakeUp
 }
 
+pub fn get_code(js_value : JsValue) -> anyhow::Result<KeyCode> {
+    let code = js_sys::Reflect::get(&js_value, &JsValue::from_str("code")).to_anyhow()?;
+    let code = code.as_string().ok_or(anyhow::anyhow!("Expected 'code' field in KeyboardEvent!"))?;
+    let code = KeyCode::from_str(&code.to_string())?;
+    return Ok(code);
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Touch {
     pub identifier : u32,
@@ -202,11 +210,6 @@ impl TryFrom<JsValue> for Touch {
             page_y: get_property_as_f64(&js_value, "pageY")? as f32
         })
     }
-}
-
-pub enum InputEvent {
-    KeyDown { code : KeyCode },
-    KeyUp { code : KeyCode }
 }
 
 #[derive(Debug)]
@@ -488,17 +491,41 @@ pub struct KeyboardState {
 }
 
 impl KeyboardState {
-    pub fn new() -> KeyboardState {
-        KeyboardState { state: HashSet::new() }
-    }
+    pub fn new() -> Rc<RefCell<KeyboardState>> {
+        let keyboard_state = Rc::new(RefCell::new(KeyboardState { state: HashSet::new() }));
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
 
-    pub fn update_legacy(&mut self, input_events : &Vec<InputEvent>) {
-        for event in input_events {
-            match event {
-                InputEvent::KeyDown { code } => { self.state.insert(*code); },
-                InputEvent::KeyUp { code } => { self.state.remove(code); }
-            }
+        {
+            let keyboard_state = keyboard_state.clone();
+
+            let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
+                let code = get_code(js_value).unwrap();
+                keyboard_state.borrow_mut().state.insert(code);
+            });
+
+            let closure = Closure::wrap(on_keydown as Box<dyn FnMut(JsValue)>);
+            document.add_event_listener_with_callback("keydown", closure.as_ref()
+                .unchecked_ref()).unwrap();
+
+            closure.forget();
         }
+
+        {
+            let keyboard_state = keyboard_state.clone();
+
+            let on_keyup : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
+                let code = get_code(js_value).unwrap();
+                keyboard_state.borrow_mut().state.remove(&code);
+            });
+
+            let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
+            document.add_event_listener_with_callback("keyup", closure.as_ref()
+                .unchecked_ref()).unwrap();
+            closure.forget();
+        }
+
+        return keyboard_state;
     }
 
     pub fn is_down(&self, code : KeyCode) -> bool {

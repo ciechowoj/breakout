@@ -1,7 +1,7 @@
 extern crate nalgebra_glm as glm;
-mod event;
 #[macro_use]
 pub mod utils;
+mod event;
 mod game;
 mod collision;
 mod webapi;
@@ -9,7 +9,6 @@ mod executor;
 
 use std::any::Any;
 use std::cell::RefCell;
-use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use std::rc::{Rc};
@@ -142,63 +141,13 @@ pub async fn wasm_main() {
     struct Recursive {
         value: Rc<dyn Fn(Rc<Recursive>)>,
         context: RefCell<Box<dyn Any>>,
-        events: Rc<RefCell<Vec<InputEvent>>>,
         event_queues: Rc<RefCell<EventQueues>>,
         performance: Performance,
         overlay: HtmlElement,
         last_time: RefCell<f64>
     };
 
-    fn bind_event_handlers(
-        document : &Document,
-        input_events : Rc<RefCell<Vec<InputEvent>>>,
-        update_struct : Rc<Recursive>) {
-
-        fn get_code(js_value : JsValue) -> anyhow::Result<KeyCode> {
-            let code = js_sys::Reflect::get(&js_value, &JsValue::from_str("code")).to_anyhow()?;
-            let code = code.as_string().ok_or(anyhow::anyhow!("Expected 'code' field in KeyboardEvent!"))?;
-            let code = KeyCode::from_str(&code.to_string())?;
-            return Ok(code);
-        };
-
-        fn js_to_keydown_event(js_value : JsValue) -> anyhow::Result<InputEvent> {
-            let event = InputEvent::KeyDown {
-                code: get_code(js_value)?
-            };
-
-            return Ok(event);
-        }
-
-        fn js_to_keyup_event(js_value : JsValue) -> anyhow::Result<InputEvent> {
-            let event = InputEvent::KeyUp {
-                code: get_code(js_value)?
-            };
-
-            return Ok(event);
-        }
-
-        let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-            let event = js_to_keydown_event(js_value).unwrap();
-            input_events.borrow_mut().push(event);
-        });
-
-        let closure = Closure::wrap(on_keydown as Box<dyn FnMut(JsValue)>);
-        document.set_onkeydown(Some(closure.as_ref().unchecked_ref()));
-        closure.forget();
-
-        let update_struct_clone = update_struct.clone();
-        let on_keyup : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-            let event = js_to_keyup_event(js_value).unwrap();
-            update_struct_clone.events.borrow_mut().push(event);
-        });
-
-        let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
-        document.set_onkeyup(Some(closure.as_ref().unchecked_ref()));
-        closure.forget();
-    }
-
     fn setup_main_loop(
-        document : &Document,
         canvas : &HtmlCanvasElement,
         overlay : HtmlElement,
         window : Window) -> anyhow::Result<()> {
@@ -220,14 +169,12 @@ pub async fn wasm_main() {
 
                     crate::update(
                         &mut update.context.borrow_mut(),
-                        &update.events.borrow(),
                         &update.event_queues.borrow(),
                         &rendering_context,
                         &update.overlay,
                         time).unwrap();
 
                     EventQueues::clear_all_queues(&update.event_queues);
-                    update.events.borrow_mut().clear();
 
                     let elapsed = now_sec(&update.performance) - time;
 
@@ -255,17 +202,11 @@ pub async fn wasm_main() {
         let update_struct = Rc::new(Recursive {
             value: update_clone.clone(),
             context: RefCell::new(Box::new(())),
-            events: Rc::new(RefCell::new(Vec::new())),
             event_queues: EventQueues::new(),
             performance: performance,
             overlay: overlay.clone(),
             last_time: RefCell::new(0f64)
         });
-
-        bind_event_handlers(
-            &document,
-            update_struct.events.clone(),
-            update_struct.clone());
 
         EventQueues::bind_all_queues(Rc::downgrade(&update_struct.event_queues), &overlay);
 
@@ -301,6 +242,7 @@ pub async fn wasm_main() {
     outer_div.append_child(&canvas).ok();
 
     let overlay : HtmlElement = document.create_element("div").unwrap().unchecked_into();
+    overlay.set_id("main-overlay");
     overlay.set_class_name("main-canvas-area");
     outer_div.append_child(&overlay).ok();
 
@@ -317,12 +259,11 @@ pub async fn wasm_main() {
     event_target.add_event_listener_with_callback("resize", function).to_anyhow().unwrap();
     closure.forget();
 
-    setup_main_loop(&document, &canvas, overlay, window).unwrap();
+    setup_main_loop(&canvas, overlay, window).unwrap();
 }
 
 pub fn update(
     context : &mut Box<dyn Any>,
-    input_events : &Vec<InputEvent>,
     event_queues : &EventQueues,
     rendering_context : &CanvasRenderingContext2d,
     overlay : &HtmlElement,
@@ -344,21 +285,21 @@ pub fn update(
 
     let canvas_size = vec2(width as f32, height as f32);
 
-    let game_state = context.downcast_mut::<GameState>();
+    let game_state = context.downcast_mut::<Rc<RefCell<GameState>>>();
 
     if game_state.is_none() {
         *context = Box::new(GameState::init(time));
-        let game_state = context.downcast_mut::<GameState>()
+        let game_state = context.downcast_mut::<Rc<RefCell<GameState>>>()
             .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
-        game::init_overlay(game_state, overlay, time)?;
+        game::init_overlay(&mut game_state.borrow_mut(), overlay, time)?;
     }
 
-    let game_state = context.downcast_mut::<GameState>()
+    let game_state = context.downcast_mut::<Rc<RefCell<GameState>>>()
         .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
 
-    game::update(game_state, overlay, input_events, event_queues, time)?;
-    game::update_overlay(game_state, overlay, time)?;
-    game::render(game_state, rendering_context, canvas_size, time)?;
+    game::update(game_state, event_queues, time)?;
+    game::update_overlay(&mut game_state.borrow_mut(), overlay, time)?;
+    game::render(&mut game_state.borrow_mut(), rendering_context, canvas_size, time)?;
 
     return Ok(());
 }

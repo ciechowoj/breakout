@@ -17,6 +17,7 @@ use std::cmp::{max};
 use std::include_str;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::ops::DerefMut;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{JsCast};
 use web_sys::*;
@@ -67,7 +68,7 @@ pub struct GameState {
     pub score_id : Rc<RefCell<uuid::Uuid>>,
     pub lives : u32,
     pub game_over_time : f64,
-    pub keyboard_state : KeyboardState,
+    pub keyboard_state : Rc<RefCell<KeyboardState>>,
     pub touch_tracker : TouchTracker,
     pub reset_requested : bool
 }
@@ -77,8 +78,8 @@ impl GameState {
         bat : Bat,
         ball : Ball,
         bricks : Bricks,
-        last_time : f64) -> GameState {
-        GameState {
+        last_time : f64) -> Rc<RefCell<GameState>> {
+        let game_state = GameState {
             stage: GameStage::Gameplay,
             bat: bat,
             ball: ball,
@@ -92,10 +93,59 @@ impl GameState {
             keyboard_state: KeyboardState::new(),
             touch_tracker: TouchTracker::new(),
             reset_requested: false
-        }
+        };
+
+        let game_state = Rc::new(RefCell::new(game_state));
+        GameState::register_event_listeners(&game_state);
+        return game_state;
     }
 
-    pub fn init(time : f64) -> GameState {
+    fn register_event_listeners(game_state : &Rc<RefCell<GameState>>) {
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+
+        let game_state = game_state.clone();
+
+        let on_keyup : Box<dyn FnMut(JsValue)> = {
+            let document = document.clone();
+
+            Box::new(move |js_value : JsValue| {
+                let code = get_code(js_value).unwrap();
+
+                let game_state : &mut GameState = &mut game_state.borrow_mut();
+
+                match code {
+                    KeyCode::Enter => {
+                        match game_state.stage {
+                            GameStage::ScoreBoard => {
+                                if !game_state.reset_requested {
+                                    if let Some(name) = player_name().unwrap() {
+                                        let overlay : HtmlElement = document.get_element_by_id("main-overlay").unwrap().unchecked_into();
+                                        let message = "Are you sure you want to post you score and nickname? The record cannot be changed or removed.";
+
+                                        if window.confirm_with_message(message).unwrap() {
+                                            persist_score(overlay, name, *game_state.score_id.borrow()).unwrap();
+                                        }
+                                    }
+
+                                    game_state.reset_requested = true;
+                                }
+                            },
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            })
+        };
+
+        let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
+        document.add_event_listener_with_callback("keyup", closure.as_ref()
+            .unchecked_ref()).unwrap();
+        closure.forget();
+    }
+
+    pub fn init(time : f64) -> Rc<RefCell<GameState>> {
         let bat = Bat::new();
         let mut ball = Ball::new();
 
@@ -103,7 +153,7 @@ impl GameState {
 
         let bricks = Bricks::new();
 
-        GameState::new(bat, ball, bricks, time)
+        return GameState::new(bat, ball, bricks, time);
     }
 }
 
@@ -231,121 +281,82 @@ pub fn update_overlay(
 }
 
 pub fn update(
-    game_state : &mut GameState,
-    overlay : &HtmlElement,
-    input_events : &Vec<InputEvent>,
+    game_state_rc : &mut Rc<RefCell<GameState>>,
     event_queues : &EventQueues,
     time : f64) -> anyhow::Result<()> {
 
-    for event in input_events {
-        match event {
-            InputEvent::KeyDown { code } => {
-                match code {
-                    _ => {}
-                }
-
-                log!("{} key pressed at time {:.2}!", code.as_ref(), time);
-            },
-            InputEvent::KeyUp { code } => {
-                match code {
-                    KeyCode::Space => { game_state.bricks.reset_last_row() }
-                    KeyCode::Enter => {
-                        match game_state.stage {
-                            GameStage::ScoreBoard => {
-                                if let Some(name) = player_name()? {
-                                    let window = web_sys::window().unwrap();
-
-
-                                    if window.confirm_with_message(
-                                        "Are you sure you want to post you score and nickname? The record cannot be changed or removed.")
-                                        .unwrap() {
-                                        persist_score(overlay.clone(), name, *game_state.score_id.borrow())?;
-                                    }
-
-                                }
-
-                                game_state.reset_requested = true;
-                                return Ok(());
-                            },
-                            _ => {}
-                        }
-                    }
-                    _ => {}
-                }
-
-                log!("{} key released at time {:.2}!", code.as_ref(), time);
-            }
-        }
+    if game_state_rc.borrow().reset_requested {
+        *game_state_rc = GameState::init(time);
     }
 
-    if game_state.reset_requested {
-        *game_state = GameState::init(time);
-    }
+    {
+        let mut borrow_mut = game_state_rc.borrow_mut();
+        let mut game_state : &mut GameState = borrow_mut.deref_mut();
 
-    game_state.keyboard_state.update_legacy(input_events);
-    game_state.touch_tracker.update(&event_queues.touch_events);
+        game_state.touch_tracker.update(&event_queues.touch_events);
 
-    let left_arrow = game_state.keyboard_state.is_down(KeyCode::ArrowLeft);
-    let right_arrow = game_state.keyboard_state.is_down(KeyCode::ArrowRight);
+        let left_arrow = game_state.keyboard_state.borrow().is_down(KeyCode::ArrowLeft);
+        let right_arrow = game_state.keyboard_state.borrow().is_down(KeyCode::ArrowRight);
 
-    game_state.bat.input = vec2(0f32, 0f32);
+        game_state.bat.input = vec2(0f32, 0f32);
 
-    if left_arrow || right_arrow {
-        if left_arrow {
-            game_state.bat.input = vec2(-1f32, 0f32);
-        }
-        else {
-            game_state.bat.input = vec2(1f32, 0f32);
-        }
-    }
-    else {
-        for touch in &game_state.touch_tracker.touches {
-            if touch.client_x < 500f32 {
+        if left_arrow || right_arrow {
+            if left_arrow {
                 game_state.bat.input = vec2(-1f32, 0f32);
             }
             else {
                 game_state.bat.input = vec2(1f32, 0f32);
             }
         }
-    }
-
-    for touch in &game_state.touch_tracker.touches {
-        log!("{:?}", touch);
-    }
-
-    let epsilon = 0.01f64;
-    let mut current = game_state.last_time;
-    game_state.time.real_time = time;
-
-    while epsilon < time - current {
-        game_state.time.sim_time += epsilon as f64;
-        game_state.time.elapsed = epsilon as f32;
-
-        match game_state.stage {
-            GameStage::Gameplay => {
-                let ball_status = update_ball(&game_state.bat, &mut game_state.ball, &mut game_state.bricks, game_state.time.elapsed)?;
-
-                game_state.score += ball_status.brick_hit_count as i64;
-
-                if ball_status.out_of_arena {
-                    decrease_lives(game_state, game_state.time);
+        else {
+            for touch in &game_state.touch_tracker.touches {
+                if touch.client_x < 500f32 {
+                    game_state.bat.input = vec2(-1f32, 0f32);
                 }
-
-                update_bat(&mut game_state.bat, game_state.time.elapsed)?;
-            },
-            GameStage::GameOver => {
-                if game_state.time.real_time - game_state.game_over_time > config::GAME_OVER_PAUSE_TIME {
-                    game_state.stage = GameStage::ScoreBoard
+                else {
+                    game_state.bat.input = vec2(1f32, 0f32);
                 }
             }
-            _ => {}
-        };
+        }
 
-        game_state.bricks.update(game_state.time.elapsed)?;
-        current += epsilon as f64;
+        for touch in &game_state.touch_tracker.touches {
+            log!("{:?}", touch);
+        }
+
+        let epsilon = 0.01f64;
+        let mut current = game_state.last_time;
+        game_state.time.real_time = time;
+
+        while epsilon < time - current {
+            game_state.time.sim_time += epsilon as f64;
+            game_state.time.elapsed = epsilon as f32;
+
+            match game_state.stage {
+                GameStage::Gameplay => {
+                    let ball_status = update_ball(&game_state.bat, &mut game_state.ball, &mut game_state.bricks, game_state.time.elapsed)?;
+
+                    game_state.score += ball_status.brick_hit_count as i64;
+
+                    if ball_status.out_of_arena {
+                        decrease_lives(game_state, game_state.time);
+                    }
+
+                    update_bat(&mut game_state.bat, game_state.time.elapsed)?;
+                },
+                GameStage::GameOver => {
+                    if game_state.time.real_time - game_state.game_over_time > config::GAME_OVER_PAUSE_TIME {
+                        game_state.stage = GameStage::ScoreBoard
+                    }
+                }
+                _ => {}
+            };
+
+            game_state.bricks.update(game_state.time.elapsed)?;
+            current += epsilon as f64;
+        }
+
+        game_state.last_time = current;
     }
-
-    game_state.last_time = current;
 
     return Ok(());
 }
