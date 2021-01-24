@@ -130,7 +130,7 @@ fn update_viewport_size() {
 }
 
 #[wasm_bindgen]
-pub async fn wasm_main() {
+pub fn wasm_main() {
     console_error_panic_hook::set_once();
 
     struct Recursive {

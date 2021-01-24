@@ -213,30 +213,6 @@ impl TryFrom<JsValue> for Touch {
 }
 
 #[derive(Debug)]
-pub enum KeyboardEventType {
-    KeyDown,
-    KeyPress,
-    KeyUp
-}
-
-#[derive(Debug)]
-pub struct KeyboardEvent {
-    pub r#type : KeyboardEventType,
-    pub code : KeyCode
-}
-
-#[derive(Debug)]
-pub enum MouseEventType {
-
-}
-
-#[derive(Debug)]
-pub struct MouseEvent {
-    pub r#type : MouseEventType,
-    pub code : KeyCode
-}
-
-#[derive(Debug)]
 pub enum TouchEventType {
     TouchCancel,
     TouchEnd,
@@ -394,14 +370,12 @@ impl InputEventTarget for HtmlElement {
 }
 
 pub struct EventQueues {
-    pub keyboard_events : Vec<KeyboardEvent>,
     pub touch_events : Vec<TouchEvent>
 }
 
 impl EventQueues {
     pub fn new() -> Rc<RefCell<EventQueues>> {
         let event_queues = EventQueues {
-            keyboard_events: Vec::<KeyboardEvent>::new(),
             touch_events: Vec::<TouchEvent>::new()
         };
 
@@ -426,7 +400,6 @@ impl EventQueues {
 
     pub fn clear_all_queues(event_queues : &Rc<RefCell<EventQueues>>) {
         let mut event_queues = event_queues.borrow_mut();
-        event_queues.keyboard_events.clear();
         event_queues.touch_events.clear();
     }
 }

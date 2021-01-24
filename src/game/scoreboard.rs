@@ -190,7 +190,7 @@ pub fn create_scoreboard(
 
 pub fn player_name() -> anyhow::Result<Option<String>> {
     let window = web_sys::window().unwrap();
-    let document = window.document().expect("Failed to get the main document!");
+    let document = window.document().unwrap();
 
     let input_or_none = document.get_element_by_id("score-board-input");
 
