@@ -120,7 +120,7 @@ impl GameState {
                             GameStage::ScoreBoard => {
                                 if !game_state.reset_requested {
                                     if let Some(name) = player_name().unwrap() {
-                                        let overlay : HtmlElement = document.get_element_by_id("main-overlay").unwrap().unchecked_into();
+                                        let overlay : HtmlElement = document.get_element_by_id("main-overlay-id").unwrap().unchecked_into();
                                         let message = "Are you sure you want to post you score and nickname? The record cannot be changed or removed.";
 
                                         if window.confirm_with_message(message).unwrap() {
@@ -157,12 +157,12 @@ impl GameState {
     }
 }
 
-pub fn init_overlay(
-    _game_state : &mut GameState,
-    overlay : &HtmlElement,
-    _time : f64) -> anyhow::Result<()> {
+pub fn init_overlay(_game_state : &mut GameState, _time : f64) -> anyhow::Result<()> {
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let overlay : HtmlElement = document.get_element_by_id("main-overlay-id")
+        .unwrap().unchecked_into();
 
-    let document = overlay.owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
     utils::create_style_element(&document, include_str!("game.css"), "game-css")?;
 
     let score : HtmlElement = document.create_element("span").unwrap().unchecked_into();
@@ -248,12 +248,11 @@ pub fn update_score_board(
 
 pub fn update_overlay(
     game_state : &mut GameState,
-    overlay : &HtmlElement,
     _time : f64) -> anyhow::Result<()> {
-
-    let document = overlay
-        .owner_document()
-        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let overlay : HtmlElement = document.get_element_by_id("main-overlay-id")
+        .unwrap().unchecked_into();
 
     let score : HtmlElement = document.get_element_by_id("footer-score").unwrap().unchecked_into();
     let lives : HtmlElement = document.get_element_by_id("footer-lives").unwrap().unchecked_into();
@@ -274,8 +273,8 @@ pub fn update_overlay(
         }
     };
 
-    update_game_over(game_state, overlay)?;
-    update_score_board(game_state, overlay)?;
+    update_game_over(game_state, &overlay)?;
+    update_score_board(game_state, &overlay)?;
 
     return Ok(());
 }

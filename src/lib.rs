@@ -25,11 +25,6 @@ use glm::vec2;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[wasm_bindgen]
-extern {
-    fn alert(s: &str);
-}
-
 fn now_sec(performance : &Performance) -> f64 {
     fn sec_to_ms(x : f64) -> f64 { x * 0.001 };
     return sec_to_ms(performance.now());
@@ -143,7 +138,6 @@ pub async fn wasm_main() {
         context: RefCell<Box<dyn Any>>,
         event_queues: Rc<RefCell<EventQueues>>,
         performance: Performance,
-        overlay: HtmlElement,
         last_time: RefCell<f64>
     };
 
@@ -171,7 +165,6 @@ pub async fn wasm_main() {
                         &mut update.context.borrow_mut(),
                         &update.event_queues.borrow(),
                         &rendering_context,
-                        &update.overlay,
                         time).unwrap();
 
                     EventQueues::clear_all_queues(&update.event_queues);
@@ -180,7 +173,6 @@ pub async fn wasm_main() {
 
                     crate::update_fps(
                         &mut update.last_time.borrow_mut(),
-                        &update.overlay,
                         elapsed,
                         time).unwrap();
 
@@ -204,7 +196,6 @@ pub async fn wasm_main() {
             context: RefCell::new(Box::new(())),
             event_queues: EventQueues::new(),
             performance: performance,
-            overlay: overlay.clone(),
             last_time: RefCell::new(0f64)
         });
 
@@ -218,9 +209,8 @@ pub async fn wasm_main() {
     set_panic_hook();
 
     let window = web_sys::window().unwrap();
-
-    let document = window.document().expect("should have a document on window");
-    document.set_title("Omg! It works!");
+    let document = window.document().unwrap();
+    document.set_title("Rusty Breakout");
 
     game::utils::create_style_element(&document, include_str!("main.css"), "main-css")
         .expect("Failed to create main.css.");
@@ -242,7 +232,7 @@ pub async fn wasm_main() {
     outer_div.append_child(&canvas).ok();
 
     let overlay : HtmlElement = document.create_element("div").unwrap().unchecked_into();
-    overlay.set_id("main-overlay");
+    overlay.set_id("main-overlay-id");
     overlay.set_class_name("main-canvas-area");
     outer_div.append_child(&overlay).ok();
 
@@ -266,7 +256,6 @@ pub fn update(
     context : &mut Box<dyn Any>,
     event_queues : &EventQueues,
     rendering_context : &CanvasRenderingContext2d,
-    overlay : &HtmlElement,
     time : f64) -> anyhow::Result<()> {
 
     let canvas = rendering_context.canvas()
@@ -291,14 +280,14 @@ pub fn update(
         *context = Box::new(GameState::init(time));
         let game_state = context.downcast_mut::<Rc<RefCell<GameState>>>()
             .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
-        game::init_overlay(&mut game_state.borrow_mut(), overlay, time)?;
+        game::init_overlay(&mut game_state.borrow_mut(), time)?;
     }
 
     let game_state = context.downcast_mut::<Rc<RefCell<GameState>>>()
         .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
 
     game::update(game_state, event_queues, time)?;
-    game::update_overlay(&mut game_state.borrow_mut(), overlay, time)?;
+    game::update_overlay(&mut game_state.borrow_mut(), time)?;
     game::render(&mut game_state.borrow_mut(), rendering_context, canvas_size, time)?;
 
     return Ok(());
@@ -306,11 +295,12 @@ pub fn update(
 
 pub fn update_fps(
     last_time : &mut f64,
-    overlay : &HtmlElement,
     elapsed : f64,
     time : f64) -> anyhow::Result<()> {
-
-    let document = overlay.owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let overlay : HtmlElement = document.get_element_by_id("main-overlay-id")
+        .unwrap().unchecked_into();
 
     if let None = document.get_element_by_id("fps-counter") {
         let fps_counter : HtmlElement = document.create_element("span").unwrap().unchecked_into();
