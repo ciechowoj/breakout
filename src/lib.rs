@@ -97,9 +97,7 @@ fn update_dynamic_fonts(width : i32) {
 
 fn update_viewport_size() {
     let document = web_sys::window().unwrap().document().unwrap();
-    let root = document
-        .document_element()
-        .expect("Failed to retrieve reference to the html element.");
+    let root = document.document_element().unwrap();
 
     let outer_div : HtmlElement = document.get_element_by_id("outer-div").unwrap().unchecked_into();
 
@@ -146,7 +144,7 @@ pub fn wasm_main() {
         overlay : HtmlElement,
         window : Window) -> anyhow::Result<()> {
 
-        let performance = window.performance().expect("performance should be available");
+        let performance = window.performance().unwrap();
 
         let canvas_clone = canvas.clone();
 
@@ -215,7 +213,7 @@ pub fn wasm_main() {
     game::utils::create_style_element(&document, include_str!("main.css"), "main-css")
         .expect("Failed to create main.css.");
 
-    let body = document.body().expect("document should have a body");
+    let body = document.body().unwrap();
 
     let outer_div : HtmlElement = document.create_element("div").unwrap().unchecked_into();
 
@@ -223,8 +221,7 @@ pub fn wasm_main() {
     body.append_child(&outer_div).ok();
 
     let canvas = document.create_element("canvas").unwrap();
-    let canvas = canvas.dyn_into::<web_sys::HtmlCanvasElement>()
-        .expect("Failed to cast 'Element' to 'HtmlCanvasElement'.");
+    let canvas : web_sys::HtmlCanvasElement = canvas.unchecked_into();
 
     canvas.set_class_name("main-canvas-area");
     reset_canvas_size(&canvas).unwrap();

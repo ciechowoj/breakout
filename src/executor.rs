@@ -65,7 +65,7 @@ pub async fn execute_queue() {
 }
 
 pub fn respawn() {
-    let window = window().expect("Failed to retrieve the reference to the global window.");
+    let window = window().unwrap();
 
     let closure = Closure::once_into_js(move || {
         wasm_bindgen_futures::spawn_local(execute_queue());
