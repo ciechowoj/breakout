@@ -7,8 +7,6 @@ mod collision;
 mod webapi;
 mod executor;
 
-use std::any::Any;
-use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use std::rc::{Rc};
@@ -127,83 +125,140 @@ fn update_viewport_size() {
     outer_div.style().set_property("height", height.as_ref()).to_anyhow().unwrap();
 }
 
-#[wasm_bindgen]
-pub fn wasm_main() {
-    console_error_panic_hook::set_once();
+struct ClosureHandle {
+    closure : Option<Box<dyn std::any::Any>>,
+    js_function : js_sys::Function
+}
 
-    struct Recursive {
-        value: Rc<dyn Fn(Rc<Recursive>)>,
-        context: RefCell<Box<dyn Any>>,
-        event_queues: Rc<RefCell<EventQueues>>,
-        performance: Performance,
-        last_time: RefCell<f64>
-    };
+impl ClosureHandle {
+    fn new() -> ClosureHandle {
+        ClosureHandle {
+            closure: None,
+            js_function: JsValue::NULL.unchecked_into()
+        }
+    }
 
-    fn setup_main_loop(
-        canvas : &HtmlCanvasElement,
-        overlay : HtmlElement,
-        window : Window) -> anyhow::Result<()> {
+    fn wrap<'a, Args : wasm_bindgen::convert::FromWasmAbi + 'static, Result : wasm_bindgen::convert::IntoWasmAbi + 'static>(closure : Box<dyn FnMut(Args) -> Result>) -> ClosureHandle {
+        let closure = Closure::wrap(closure);
+        let js_function = closure.as_ref().unchecked_ref::<js_sys::Function>().clone();
 
-        let performance = window.performance().unwrap();
+        ClosureHandle {
+            closure: Some(Box::new(closure)),
+            js_function: js_function
+        }
+    }
 
-        let canvas_clone = canvas.clone();
+    fn get_function(&self) -> &js_sys::Function {
+        match self.closure {
+            Some(_) => {
+                return &self.js_function;
+            }
+            None => {
+                panic!();
+            }
+        }
+    }
+}
 
-        let update = move |update: Rc<Recursive>| {
-            let rendering_context : web_sys::CanvasRenderingContext2d = canvas_clone
-                .get_context("2d")
-                .unwrap()
-                .unwrap()
-                .unchecked_into();
+struct Application {
+    event_queues: std::rc::Rc<std::cell::RefCell<EventQueues>>,
+    js_performance : web_sys::Performance,
+    last_update_time : f64,
+    game_state : Option<std::rc::Rc<std::cell::RefCell<GameState>>>,
+    update_closure : ClosureHandle
+}
 
-            let inner : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-                if let Some(_) = js_value.as_f64() {
-                    let time = now_sec(&update.performance);
+impl Application {
+    fn new() -> std::rc::Rc<std::cell::RefCell<Self>> {
+        let window = web_sys::window().unwrap();
 
-                    crate::update(
-                        &mut update.context.borrow_mut(),
-                        &update.event_queues.borrow(),
-                        &rendering_context,
-                        time).unwrap();
+        let application = std::rc::Rc::new(
+            std::cell::RefCell::new(
+                Application {
+                    event_queues: EventQueues::new(),
+                    js_performance: window.performance().unwrap(),
+                    last_update_time: 0f64,
+                    game_state: None,
+                    update_closure: ClosureHandle::new()
+                }));
 
-                    EventQueues::clear_all_queues(&update.event_queues);
+        let closure = ClosureHandle::wrap({
+            let window = window.clone();
+            let application = std::rc::Rc::downgrade(&application);
 
-                    let elapsed = now_sec(&update.performance) - time;
+            Box::new(move |_ : JsValue| {
+                let application = application.upgrade();
+                let application = application.unwrap();
+                let mut application = application.borrow_mut();
 
-                    crate::update_fps(
-                        &mut update.last_time.borrow_mut(),
-                        elapsed,
-                        time).unwrap();
+                let time = now_sec(&application.js_performance);
 
-                }
+                application.update(time).unwrap();
 
-                let update_clone = update.clone();
+                EventQueues::clear_all_queues(&application.event_queues);
 
-                (update.value)(update_clone);
-            });
+                let elapsed = now_sec(&application.js_performance) - time;
 
-            let closure = Closure::once_into_js(inner as Box<dyn FnMut(JsValue)>);
+                crate::update_fps(
+                    &mut application.last_update_time,
+                    elapsed,
+                    time).unwrap();
 
-            window.request_animation_frame(closure.as_ref().unchecked_ref())
-                .unwrap();
-        };
-
-        let update_clone = Rc::new(update);
-
-        let update_struct = Rc::new(Recursive {
-            value: update_clone.clone(),
-            context: RefCell::new(Box::new(())),
-            event_queues: EventQueues::new(),
-            performance: performance,
-            last_time: RefCell::new(0f64)
+                window.request_animation_frame(application.update_closure.get_function())
+                    .unwrap();
+            })
         });
 
-        EventQueues::bind_all_queues(Rc::downgrade(&update_struct.event_queues), &overlay);
+        application.borrow_mut().update_closure = closure;
 
-        update_clone(update_struct);
+        return application;
+    }
+
+    fn start(&mut self) {
+        let window = window().unwrap();
+        window.request_animation_frame(self.update_closure.get_function())
+            .unwrap();
+    }
+
+    fn update(&mut self, time : f64) -> anyhow::Result<()> {
+        let window = window().unwrap();
+        let document = window.document().unwrap();
+
+        let canvas : web_sys::HtmlCanvasElement = document.get_element_by_id("main-canvas-id")
+            .unwrap().unchecked_into();
+
+        let rendering_context : web_sys::CanvasRenderingContext2d = canvas.get_context("2d")
+                .unwrap().unwrap().unchecked_into();
+
+        let mut width = canvas.width();
+        let mut height = canvas.height();
+        let scroll_width = canvas.scroll_width() as u32;
+        let scroll_height = canvas.scroll_height() as u32;
+
+        if width != scroll_width || height != scroll_height {
+            reset_canvas_size(&canvas)?;
+            width = canvas.width();
+            height = canvas.height();
+        }
+
+        let canvas_size = vec2(width as f32, height as f32);
+
+        if self.game_state.is_none() {
+            self.game_state = Some(GameState::init(time));
+            game::init_overlay(&mut self.game_state.as_mut().unwrap().borrow_mut(), time)?;
+        }
+
+        game::update(&mut self.game_state.as_mut().unwrap(), &self.event_queues.borrow(), time)?;
+        game::update_overlay(&mut self.game_state.as_mut().unwrap().borrow_mut(), time)?;
+        game::render(&mut self.game_state.as_mut().unwrap().borrow_mut(), &rendering_context, canvas_size, time)?;
 
         return Ok(());
     }
+}
 
+#[wasm_bindgen]
+pub fn wasm_main() {
+    console_error_panic_hook::set_once();
     set_panic_hook();
 
     let window = web_sys::window().unwrap();
@@ -215,14 +270,15 @@ pub fn wasm_main() {
 
     let body = document.body().unwrap();
 
-    let outer_div : HtmlElement = document.create_element("div").unwrap().unchecked_into();
+    let outer_div : HtmlElement = document.create_element("div")
+        .unwrap().unchecked_into();
 
     outer_div.set_id("outer-div");
     body.append_child(&outer_div).ok();
 
     let canvas = document.create_element("canvas").unwrap();
     let canvas : web_sys::HtmlCanvasElement = canvas.unchecked_into();
-
+    canvas.set_id("main-canvas-id");
     canvas.set_class_name("main-canvas-area");
     reset_canvas_size(&canvas).unwrap();
 
@@ -246,48 +302,11 @@ pub fn wasm_main() {
     event_target.add_event_listener_with_callback("resize", function).to_anyhow().unwrap();
     closure.forget();
 
-    setup_main_loop(&canvas, overlay, window).unwrap();
-}
+    let application = Application::new();
+    EventQueues::bind_all_queues(Rc::downgrade(&application.borrow_mut().event_queues), &overlay);
 
-pub fn update(
-    context : &mut Box<dyn Any>,
-    event_queues : &EventQueues,
-    rendering_context : &CanvasRenderingContext2d,
-    time : f64) -> anyhow::Result<()> {
-
-    let canvas = rendering_context.canvas()
-        .ok_or(anyhow::anyhow!("Failed to get canvas from rendering context."))?;
-
-    let mut width = canvas.width();
-    let mut height = canvas.height();
-    let scroll_width = canvas.scroll_width() as u32;
-    let scroll_height = canvas.scroll_height() as u32;
-
-    if width != scroll_width || height != scroll_height {
-        reset_canvas_size(&canvas)?;
-        width = canvas.width();
-        height = canvas.height();
-    }
-
-    let canvas_size = vec2(width as f32, height as f32);
-
-    let game_state = context.downcast_mut::<Rc<RefCell<GameState>>>();
-
-    if game_state.is_none() {
-        *context = Box::new(GameState::init(time));
-        let game_state = context.downcast_mut::<Rc<RefCell<GameState>>>()
-            .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
-        game::init_overlay(&mut game_state.borrow_mut(), time)?;
-    }
-
-    let game_state = context.downcast_mut::<Rc<RefCell<GameState>>>()
-        .ok_or(anyhow::anyhow!("Failed to downcast context to GameState!"))?;
-
-    game::update(game_state, event_queues, time)?;
-    game::update_overlay(&mut game_state.borrow_mut(), time)?;
-    game::render(&mut game_state.borrow_mut(), rendering_context, canvas_size, time)?;
-
-    return Ok(());
+    application.borrow_mut().start();
+    std::mem::forget(application);
 }
 
 pub fn update_fps(
