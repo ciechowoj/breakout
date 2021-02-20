@@ -5,185 +5,10 @@ use web_sys::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
-use strum_macros::AsRefStr;
-use strum_macros::EnumString;
-
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom};
 use std::rc::{Rc, Weak};
-use std::str::FromStr;
-
-#[derive(Clone, Copy, Debug, AsRefStr, EnumString, PartialEq, Eq, Hash)]
-pub enum KeyCode {
-    Again,
-    AltLeft,
-    AltRight,
-    ArrowDown,
-    ArrowLeft,
-    ArrowRight,
-    ArrowUp,
-    AudioVolumeDown,
-    AudioVolumeMute,
-    AudioVolumeUp,
-    Backquote,
-    Backslash,
-    Backspace,
-    BracketLeft,
-    BracketRight,
-    BrowserBack,
-    BrowserFavorites,
-    BrowserForward,
-    BrowserHome,
-    BrowserRefresh,
-    BrowserSearch,
-    BrowserStop,
-    CapsLock,
-    Comma,
-    ContextMenu,
-    ControlLeft,
-    ControlRight,
-    Convert,
-    Copy,
-    Cut,
-    Delete,
-    Digit0,
-    Digit1,
-    Digit2,
-    Digit3,
-    Digit4,
-    Digit5,
-    Digit6,
-    Digit7,
-    Digit8,
-    Digit9,
-    Eject,
-    End,
-    Enter,
-    Equal,
-    Escape,
-    F1,
-    F10,
-    F11,
-    F12,
-    F13,
-    F14,
-    F15,
-    F16,
-    F17,
-    F18,
-    F19,
-    F2,
-    F20,
-    F21,
-    F22,
-    F23,
-    F24,
-    F3,
-    F4,
-    F5,
-    F6,
-    F7,
-    F8,
-    F9,
-    Find,
-    Help,
-    Home,
-    Insert,
-    IntlBackslash,
-    IntlRo,
-    IntlYen,
-    KanaMode,
-    KeyA,
-    KeyB,
-    KeyC,
-    KeyD,
-    KeyE,
-    KeyF,
-    KeyG,
-    KeyH,
-    KeyI,
-    KeyJ,
-    KeyK,
-    KeyL,
-    KeyM,
-    KeyN,
-    KeyO,
-    KeyP,
-    KeyQ,
-    KeyR,
-    KeyS,
-    KeyT,
-    KeyU,
-    KeyV,
-    KeyW,
-    KeyX,
-    KeyY,
-    KeyZ,
-    Lang1,
-    Lang2,
-    LaunchApp1,
-    LaunchApp2,
-    LaunchMail,
-    LaunchMediaPlayer,
-    MediaPlayPause,
-    MediaStop,
-    MediaTrackNext,
-    MediaTrackPrevious,
-    Minus,
-    NonConvert,
-    NumLock,
-    Numpad0,
-    Numpad1,
-    Numpad2,
-    Numpad3,
-    Numpad4,
-    Numpad5,
-    Numpad6,
-    Numpad7,
-    Numpad8,
-    Numpad9,
-    NumpadAdd,
-    NumpadChangeSign,
-    NumpadComma,
-    NumpadDecimal,
-    NumpadDivide,
-    NumpadEnter,
-    NumpadEqual,
-    NumpadMultiply,
-    NumpadParenLeft,
-    NumpadParenRight,
-    NumpadSubtract,
-    Open,
-    OSLeft,
-    OSRight,
-    PageDown,
-    PageUp,
-    Paste,
-    Pause,
-    Period,
-    Power,
-    PrintScreen,
-    Props,
-    Quote,
-    ScrollLock,
-    Select,
-    Semicolon,
-    ShiftLeft,
-    ShiftRight,
-    Slash,
-    Space,
-    Tab,
-    Undo,
-    WakeUp
-}
-
-pub fn get_code(js_value : JsValue) -> anyhow::Result<KeyCode> {
-    let code = js_sys::Reflect::get(&js_value, &JsValue::from_str("code")).to_anyhow()?;
-    let code = code.as_string().ok_or(anyhow::anyhow!("Expected 'code' field in KeyboardEvent!"))?;
-    let code = KeyCode::from_str(&code.to_string())?;
-    return Ok(code);
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Touch {
@@ -460,7 +285,7 @@ impl TouchTracker {
 }
 
 pub struct KeyboardState {
-    state : HashSet<KeyCode>
+    state : HashSet<String>
 }
 
 impl KeyboardState {
@@ -472,12 +297,11 @@ impl KeyboardState {
         {
             let keyboard_state = keyboard_state.clone();
 
-            let on_keydown : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-                let code = get_code(js_value).unwrap();
-                keyboard_state.borrow_mut().state.insert(code);
+            let on_keydown : Box<dyn FnMut(web_sys::KeyboardEvent)> = Box::new(move |event : web_sys::KeyboardEvent| {
+                keyboard_state.borrow_mut().state.insert(event.key());
             });
 
-            let closure = Closure::wrap(on_keydown as Box<dyn FnMut(JsValue)>);
+            let closure = Closure::wrap(on_keydown);
             document.add_event_listener_with_callback("keydown", closure.as_ref()
                 .unchecked_ref()).unwrap();
 
@@ -487,12 +311,11 @@ impl KeyboardState {
         {
             let keyboard_state = keyboard_state.clone();
 
-            let on_keyup : Box<dyn FnMut(JsValue)> = Box::new(move |js_value : JsValue| {
-                let code = get_code(js_value).unwrap();
-                keyboard_state.borrow_mut().state.remove(&code);
+            let on_keyup : Box<dyn FnMut(web_sys::KeyboardEvent)> = Box::new(move |event : web_sys::KeyboardEvent| {
+                keyboard_state.borrow_mut().state.remove(&event.key());
             });
 
-            let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
+            let closure = Closure::wrap(on_keyup);
             document.add_event_listener_with_callback("keyup", closure.as_ref()
                 .unchecked_ref()).unwrap();
             closure.forget();
@@ -501,7 +324,7 @@ impl KeyboardState {
         return keyboard_state;
     }
 
-    pub fn is_down(&self, code : KeyCode) -> bool {
-       self.state.contains(&code)
+    pub fn is_down(&self, code : &'static str) -> bool {
+       self.state.contains(code)
     }
 }

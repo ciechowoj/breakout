@@ -106,16 +106,14 @@ impl GameState {
 
         let game_state = game_state.clone();
 
-        let on_keyup : Box<dyn FnMut(JsValue)> = {
+        let on_keyup : Box<dyn FnMut(web_sys::KeyboardEvent)> = {
             let document = document.clone();
 
-            Box::new(move |js_value : JsValue| {
-                let code = get_code(js_value).unwrap();
-
+            Box::new(move |event : web_sys::KeyboardEvent| {
                 let game_state : &mut GameState = &mut game_state.borrow_mut();
 
-                match code {
-                    KeyCode::Enter => {
+                match event.key().as_str() {
+                    "Enter" => {
                         match game_state.stage {
                             GameStage::ScoreBoard => {
                                 if !game_state.reset_requested {
@@ -139,7 +137,7 @@ impl GameState {
             })
         };
 
-        let closure = Closure::wrap(on_keyup as Box<dyn FnMut(JsValue)>);
+        let closure = Closure::wrap(on_keyup);
         document.add_event_listener_with_callback("keyup", closure.as_ref()
             .unchecked_ref()).unwrap();
         closure.forget();
@@ -294,8 +292,8 @@ pub fn update(
 
         game_state.touch_tracker.update(&event_queues.touch_events);
 
-        let left_arrow = game_state.keyboard_state.borrow().is_down(KeyCode::ArrowLeft);
-        let right_arrow = game_state.keyboard_state.borrow().is_down(KeyCode::ArrowRight);
+        let left_arrow = game_state.keyboard_state.borrow().is_down("ArrowLeft");
+        let right_arrow = game_state.keyboard_state.borrow().is_down("ArrowRight");
 
         game_state.bat.input = vec2(0f32, 0f32);
 
