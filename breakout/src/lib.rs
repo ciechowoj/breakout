@@ -95,7 +95,7 @@ fn update_viewport_size() {
     let document = web_sys::window().unwrap().document().unwrap();
     let root = document.document_element().unwrap();
 
-    let outer_div : HtmlElement = document.get_element_by_id("outer-div").unwrap().unchecked_into();
+    let common_div : HtmlElement = document.get_element_by_id("common-div").unwrap().unchecked_into();
 
     let client_width = root.client_width() as f32;
     let client_height = root.client_height() as f32;
@@ -119,8 +119,8 @@ fn update_viewport_size() {
     let width = format!("{}px", width);
     let height = format!("{}px", height);
 
-    outer_div.style().set_property("width", width.as_ref()).to_anyhow().unwrap();
-    outer_div.style().set_property("height", height.as_ref()).to_anyhow().unwrap();
+    common_div.style().set_property("width", width.as_ref()).to_anyhow().unwrap();
+    common_div.style().set_property("height", height.as_ref()).to_anyhow().unwrap();
 }
 
 struct Application {
@@ -235,18 +235,24 @@ pub fn wasm_main() {
     outer_div.set_id("outer-div");
     body.append_child(&outer_div).ok();
 
+    let common_div : HtmlElement = document.create_element("div")
+        .unwrap().unchecked_into();
+
+    common_div.set_id("common-div");
+    outer_div.append_child(&common_div).ok();
+
     let canvas = document.create_element("canvas").unwrap();
     let canvas : web_sys::HtmlCanvasElement = canvas.unchecked_into();
     canvas.set_id("main-canvas-id");
     canvas.set_class_name("main-canvas-area");
     reset_canvas_size(&canvas).unwrap();
 
-    outer_div.append_child(&canvas).ok();
+    common_div.append_child(&canvas).ok();
 
     let overlay : HtmlElement = document.create_element("div").unwrap().unchecked_into();
     overlay.set_id("main-overlay-id");
     overlay.set_class_name("main-canvas-area");
-    outer_div.append_child(&overlay).ok();
+    common_div.append_child(&overlay).ok();
 
     let event_target = EventTarget::from(web_sys::window().unwrap());
 

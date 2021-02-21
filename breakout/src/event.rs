@@ -2,7 +2,6 @@ use crate::utils::*;
 
 use web_sys::*;
 use wasm_bindgen::JsCast;
-use wasm_bindgen::prelude::*;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -103,6 +102,7 @@ impl TouchTracker {
 
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();
+
         let overlay : HtmlElement = document.get_element_by_id("main-overlay-id")
             .unwrap().unchecked_into();
 
@@ -110,6 +110,14 @@ impl TouchTracker {
         overlay.add_event_listener_with_callback("touchmove", closure.function()).unwrap();
         overlay.add_event_listener_with_callback("touchend", closure.function()).unwrap();
         overlay.add_event_listener_with_callback("touchcancel", closure.function()).unwrap();
+
+        let body : HtmlElement = document.body().unwrap();
+
+        body.add_event_listener_with_callback("touchstart", closure.function()).unwrap();
+        body.add_event_listener_with_callback("touchmove", closure.function()).unwrap();
+        body.add_event_listener_with_callback("touchend", closure.function()).unwrap();
+        body.add_event_listener_with_callback("touchcancel", closure.function()).unwrap();
+
         touch_tracker.borrow_mut().closure = closure;
 
         return touch_tracker;
@@ -117,41 +125,46 @@ impl TouchTracker {
 }
 
 pub struct KeyboardState {
-    state : HashSet<String>
+    state : HashSet<String>,
+    keydown_closure : ClosureHandle,
+    keyup_closure : ClosureHandle
 }
 
 impl KeyboardState {
     pub fn new() -> Rc<RefCell<KeyboardState>> {
-        let keyboard_state = Rc::new(RefCell::new(KeyboardState { state: HashSet::new() }));
+        let keyboard_state = Rc::new(RefCell::new(
+            KeyboardState {
+                state: HashSet::new(),
+                keydown_closure: ClosureHandle::Empty,
+                keyup_closure: ClosureHandle::Empty
+            }));
+
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();
 
-        {
-            let keyboard_state = keyboard_state.clone();
+        let keydown_closure = ClosureHandle::new({
+            let keyboard_state = std::rc::Rc::downgrade(&keyboard_state);
 
-            let on_keydown : Box<dyn FnMut(web_sys::KeyboardEvent)> = Box::new(move |event : web_sys::KeyboardEvent| {
+            Box::new(move |event : web_sys::KeyboardEvent| {
+                let keyboard_state = keyboard_state.upgrade().unwrap();
                 keyboard_state.borrow_mut().state.insert(event.key());
-            });
+            })
+        });
 
-            let closure = Closure::wrap(on_keydown);
-            document.add_event_listener_with_callback("keydown", closure.as_ref()
-                .unchecked_ref()).unwrap();
+        let keyup_closure = ClosureHandle::new({
+            let keyboard_state = std::rc::Rc::downgrade(&keyboard_state);
 
-            closure.forget();
-        }
-
-        {
-            let keyboard_state = keyboard_state.clone();
-
-            let on_keyup : Box<dyn FnMut(web_sys::KeyboardEvent)> = Box::new(move |event : web_sys::KeyboardEvent| {
+            Box::new(move |event : web_sys::KeyboardEvent| {
+                let keyboard_state = keyboard_state.upgrade().unwrap();
                 keyboard_state.borrow_mut().state.remove(&event.key());
-            });
+            })
+        });
 
-            let closure = Closure::wrap(on_keyup);
-            document.add_event_listener_with_callback("keyup", closure.as_ref()
-                .unchecked_ref()).unwrap();
-            closure.forget();
-        }
+        document.add_event_listener_with_callback("keydown", keydown_closure.function()).unwrap();
+        document.add_event_listener_with_callback("keyup", keyup_closure.function()).unwrap();
+
+        keyboard_state.borrow_mut().keydown_closure = keydown_closure;
+        keyboard_state.borrow_mut().keyup_closure = keyup_closure;
 
         return keyboard_state;
     }
