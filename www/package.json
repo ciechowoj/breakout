@@ -23,14 +23,14 @@
     "rust",
     "webpack"
   ],
-  "author": "Ashley Williams <ashley666ashley@gmail.com>",
+  "author": "Wojciech Szęszoł <keepitsimplesirius@gmail.com>",
   "license": "(MIT OR Apache-2.0)",
   "bugs": {
     "url": "https://github.com/rustwasm/create-wasm-app/issues"
   },
   "homepage": "https://github.com/rustwasm/create-wasm-app#readme",
   "dependencies": {
-    "breakout": "file:../pkg",
+    "breakout": "file:../breakout/pkg",
     "kind-of": ">=6.0.3",
     "minimist": ">=0.2.1",
     "webpack-shell-plugin": "^0.5.0",

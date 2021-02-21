@@ -2,6 +2,7 @@
 **/target/debug/*
 **/target/release/*
 **/target/rls/*
+**/target/wasm32-unknown-unknown/*
 **/target/.rustc_info.json
 **/*.rs.bk
 Cargo.lock
