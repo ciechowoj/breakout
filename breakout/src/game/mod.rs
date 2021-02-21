@@ -69,7 +69,7 @@ pub struct GameState {
     pub lives : u32,
     pub game_over_time : f64,
     pub keyboard_state : Rc<RefCell<KeyboardState>>,
-    pub touch_tracker : TouchTracker,
+    pub touch_tracker : Rc<RefCell<TouchTracker>>,
     pub reset_requested : bool
 }
 
@@ -279,7 +279,6 @@ pub fn update_overlay(
 
 pub fn update(
     game_state_rc : &mut Rc<RefCell<GameState>>,
-    event_queues : &EventQueues,
     time : f64) -> anyhow::Result<()> {
 
     if game_state_rc.borrow().reset_requested {
@@ -289,8 +288,6 @@ pub fn update(
     {
         let mut borrow_mut = game_state_rc.borrow_mut();
         let mut game_state : &mut GameState = borrow_mut.deref_mut();
-
-        game_state.touch_tracker.update(&event_queues.touch_events);
 
         let left_arrow = game_state.keyboard_state.borrow().is_down("ArrowLeft");
         let right_arrow = game_state.keyboard_state.borrow().is_down("ArrowRight");
@@ -306,7 +303,7 @@ pub fn update(
             }
         }
         else {
-            for touch in &game_state.touch_tracker.touches {
+            for touch in &game_state.touch_tracker.borrow().touches {
                 if touch.client_x < 500i32 {
                     game_state.bat.input = vec2(-1f32, 0f32);
                 }
@@ -316,7 +313,7 @@ pub fn update(
             }
         }
 
-        for touch in &game_state.touch_tracker.touches {
+        for touch in &game_state.touch_tracker.borrow().touches {
             log!("{:?}", touch);
         }
 

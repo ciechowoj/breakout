@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom};
-use std::rc::{Rc, Weak};
+use std::rc::{Rc};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Touch {
@@ -36,143 +36,83 @@ impl TryFrom<web_sys::Touch> for Touch {
     }
 }
 
-#[derive(Debug)]
-pub enum TouchEventType {
-    TouchCancel,
-    TouchEnd,
-    TouchMove,
-    TouchStart
-}
-
-#[derive(Debug)]
-pub struct TouchEvent {
-    pub r#type : TouchEventType,
-    pub touches : Vec<Touch>
-}
-
-impl TryFrom<String> for TouchEventType {
-    type Error = anyhow::Error;
-
-    fn try_from(r#type: String) -> anyhow::Result<Self> {
-        let error = "Failed to convert JsValue to TouchEventType!";
-
-        match r#type.as_str() {
-            "touchcancel" => Ok(TouchEventType::TouchCancel),
-            "touchend" => Ok(TouchEventType::TouchEnd),
-            "touchmove" => Ok(TouchEventType::TouchMove),
-            "touchstart" => Ok(TouchEventType::TouchStart),
-            _ => Err(anyhow::anyhow!(error))
-        }
-    }
-}
-
-impl TryFrom<web_sys::TouchEvent> for TouchEvent {
-    type Error = anyhow::Error;
-
-    fn try_from(touch_event: web_sys::TouchEvent) -> anyhow::Result<Self> {
-
-        let touches = touch_event.touches();
-
-        let mut output_touches : Vec<Touch> = Vec::with_capacity(touches.length() as usize);
-
-        for i in 0..touches.length() {
-            output_touches.push(Touch::try_from(touches.get(i).unwrap())?);
-        }
-
-        Ok(TouchEvent {
-            r#type: TouchEventType::try_from(touch_event.type_())?,
-            touches: output_touches
-        })
-    }
-}
-
-pub struct EventQueues {
-    pub touch_events : Vec<TouchEvent>
-}
-
-impl EventQueues {
-    pub fn new() -> Rc<RefCell<EventQueues>> {
-        let event_queues = EventQueues {
-            touch_events: Vec::<TouchEvent>::new()
-        };
-
-        return Rc::new(RefCell::new(event_queues))
-    }
-
-    pub fn bind_all_queues(event_queues : Weak<RefCell<EventQueues>>, source : &HtmlElement) {
-        let closure = ClosureHandle::new(Box::new(move |event : web_sys::TouchEvent| {
-            match event_queues.upgrade() {
-                Some(event_queues) => event_queues.borrow_mut().touch_events.push(TouchEvent::try_from(event).unwrap()),
-                None => ()
-            }
-        }));
-
-        source.add_event_listener_with_callback("touchstart", closure.function()).unwrap();
-        source.add_event_listener_with_callback("touchmove", closure.function()).unwrap();
-        source.add_event_listener_with_callback("touchend", closure.function()).unwrap();
-        source.add_event_listener_with_callback("touchcancel", closure.function()).unwrap();
-
-        std::mem::forget(closure);
-    }
-
-    pub fn clear_all_queues(event_queues : &Rc<RefCell<EventQueues>>) {
-        let mut event_queues = event_queues.borrow_mut();
-        event_queues.touch_events.clear();
-    }
-}
-
 pub struct TouchTracker {
-    pub touches : Vec<Touch>
+    pub touches : Vec<Touch>,
+    pub closure : ClosureHandle
 }
 
 impl TouchTracker {
-    pub fn new() -> TouchTracker {
-        TouchTracker { touches: Vec::new() }
-    }
+    pub fn new() -> std::rc::Rc<std::cell::RefCell<TouchTracker>> {
+        let touch_tracker = Rc::new(RefCell::new(
+            TouchTracker {
+                touches: Vec::new(),
+                closure: ClosureHandle::Empty
+            }));
 
-    pub fn update(&mut self, touch_events : &Vec<TouchEvent>) {
-        let mut id_map : HashMap<i32, usize> = HashMap::new();
+        let closure = ClosureHandle::new({
+            let touch_tracker = std::rc::Rc::downgrade(&touch_tracker);
 
-        for i in 0..self.touches.len() {
-            id_map.insert(self.touches[i].identifier, i);
-        }
+            Box::new(move |event : web_sys::TouchEvent| {
+                let mut id_map : HashMap<i32, usize> = HashMap::new();
+                let touch_tracker = touch_tracker.upgrade().unwrap();
+                let mut touch_tracker = touch_tracker.borrow_mut();
+                let event_touches = event.touches();
 
-        for event in touch_events {
-            match event.r#type {
-                TouchEventType::TouchStart | TouchEventType::TouchMove  => {
-                    for touch in &event.touches {
-                        if let Some(index) = id_map.get(&touch.identifier) {
-                            self.touches[*index] = *touch;
+                let touches = (0..event_touches.length()).map(|i| {
+                    Touch::try_from(event_touches.get(i).unwrap()).unwrap()
+                });
+
+                match event.type_().as_str() {
+                    "touchstart" | "touchmove" => {
+                        for touch in touches {
+                            if let Some(index) = id_map.get(&touch.identifier) {
+                                touch_tracker.touches[*index] = touch;
+                            }
+                            else {
+                                id_map.insert(touch.identifier, touch_tracker.touches.len());
+                                touch_tracker.touches.push(touch);
+                            }
                         }
-                        else {
-                            id_map.insert(touch.identifier, self.touches.len());
-                            self.touches.push(*touch);
+                    },
+
+                    "touchend" | "touchcancel" => {
+                        let mut retain_set : HashSet<i32> = HashSet::new();
+
+                        for touch in touches {
+                            retain_set.insert(touch.identifier);
+                        }
+
+                        let mut i = 0;
+                        while i < touch_tracker.touches.len() {
+                            if !retain_set.contains(&touch_tracker.touches[i].identifier) {
+                                id_map.remove(&touch_tracker.touches[i].identifier);
+                                touch_tracker.touches[i] = touch_tracker.touches[touch_tracker.touches.len() - 1];
+                                id_map.insert(touch_tracker.touches[i].identifier, i);
+                                touch_tracker.touches.pop();
+                            }
+                            else {
+                                i += 1;
+                            }
                         }
                     }
+
+                    _ => ()
                 }
+            })
+        });
 
-                TouchEventType::TouchEnd | TouchEventType::TouchCancel => {
-                    let mut retain_set : HashSet<i32> = HashSet::new();
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+        let overlay : HtmlElement = document.get_element_by_id("main-overlay-id")
+            .unwrap().unchecked_into();
 
-                    for touch in &event.touches {
-                        retain_set.insert(touch.identifier);
-                    }
+        overlay.add_event_listener_with_callback("touchstart", closure.function()).unwrap();
+        overlay.add_event_listener_with_callback("touchmove", closure.function()).unwrap();
+        overlay.add_event_listener_with_callback("touchend", closure.function()).unwrap();
+        overlay.add_event_listener_with_callback("touchcancel", closure.function()).unwrap();
+        touch_tracker.borrow_mut().closure = closure;
 
-                    let mut i = 0;
-                    while i < self.touches.len() {
-                        if !retain_set.contains(&self.touches[i].identifier) {
-                            id_map.remove(&self.touches[i].identifier);
-                            self.touches[i] = self.touches[self.touches.len() - 1];
-                            id_map.insert(self.touches[i].identifier, i);
-                            self.touches.pop();
-                        }
-                        else {
-                            i += 1;
-                        }
-                    }
-                }
-            }
-        }
+        return touch_tracker;
     }
 }
 

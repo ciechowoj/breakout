@@ -9,10 +9,8 @@ mod executor;
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use std::rc::{Rc};
 use std::include_str;
 use web_sys::*;
-use event::*;
 use utils::*;
 use game::*;
 use glm::vec2;
@@ -126,7 +124,6 @@ fn update_viewport_size() {
 }
 
 struct Application {
-    event_queues: std::rc::Rc<std::cell::RefCell<EventQueues>>,
     js_performance : web_sys::Performance,
     last_update_time : f64,
     game_state : Option<std::rc::Rc<std::cell::RefCell<GameState>>>,
@@ -140,7 +137,6 @@ impl Application {
         let application = std::rc::Rc::new(
             std::cell::RefCell::new(
                 Application {
-                    event_queues: EventQueues::new(),
                     js_performance: window.performance().unwrap(),
                     last_update_time: 0f64,
                     game_state: None,
@@ -159,8 +155,6 @@ impl Application {
                 let time = now_sec(&application.js_performance);
 
                 application.update(time).unwrap();
-
-                EventQueues::clear_all_queues(&application.event_queues);
 
                 let elapsed = now_sec(&application.js_performance) - time;
 
@@ -213,7 +207,7 @@ impl Application {
             game::init_overlay(&mut self.game_state.as_mut().unwrap().borrow_mut(), time)?;
         }
 
-        game::update(&mut self.game_state.as_mut().unwrap(), &self.event_queues.borrow(), time)?;
+        game::update(&mut self.game_state.as_mut().unwrap(), time)?;
         game::update_overlay(&mut self.game_state.as_mut().unwrap().borrow_mut(), time)?;
         game::render(&mut self.game_state.as_mut().unwrap().borrow_mut(), &rendering_context, canvas_size, time)?;
 
@@ -268,7 +262,6 @@ pub fn wasm_main() {
     closure.forget();
 
     let application = Application::new();
-    EventQueues::bind_all_queues(Rc::downgrade(&application.borrow_mut().event_queues), &overlay);
 
     application.borrow_mut().start();
     std::mem::forget(application);
