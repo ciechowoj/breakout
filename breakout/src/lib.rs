@@ -125,41 +125,6 @@ fn update_viewport_size() {
     outer_div.style().set_property("height", height.as_ref()).to_anyhow().unwrap();
 }
 
-struct ClosureHandle {
-    closure : Option<Box<dyn std::any::Any>>,
-    js_function : js_sys::Function
-}
-
-impl ClosureHandle {
-    fn new() -> ClosureHandle {
-        ClosureHandle {
-            closure: None,
-            js_function: JsValue::NULL.unchecked_into()
-        }
-    }
-
-    fn wrap<'a, Args : wasm_bindgen::convert::FromWasmAbi + 'static, Result : wasm_bindgen::convert::IntoWasmAbi + 'static>(closure : Box<dyn FnMut(Args) -> Result>) -> ClosureHandle {
-        let closure = Closure::wrap(closure);
-        let js_function = closure.as_ref().unchecked_ref::<js_sys::Function>().clone();
-
-        ClosureHandle {
-            closure: Some(Box::new(closure)),
-            js_function: js_function
-        }
-    }
-
-    fn get_function(&self) -> &js_sys::Function {
-        match self.closure {
-            Some(_) => {
-                return &self.js_function;
-            }
-            None => {
-                panic!();
-            }
-        }
-    }
-}
-
 struct Application {
     event_queues: std::rc::Rc<std::cell::RefCell<EventQueues>>,
     js_performance : web_sys::Performance,
@@ -179,10 +144,10 @@ impl Application {
                     js_performance: window.performance().unwrap(),
                     last_update_time: 0f64,
                     game_state: None,
-                    update_closure: ClosureHandle::new()
+                    update_closure: ClosureHandle::Empty
                 }));
 
-        let closure = ClosureHandle::wrap({
+        let closure = ClosureHandle::new({
             let window = window.clone();
             let application = std::rc::Rc::downgrade(&application);
 
@@ -204,7 +169,7 @@ impl Application {
                     elapsed,
                     time).unwrap();
 
-                window.request_animation_frame(application.update_closure.get_function())
+                window.request_animation_frame(application.update_closure.function())
                     .unwrap();
             })
         });
@@ -216,7 +181,7 @@ impl Application {
 
     fn start(&mut self) {
         let window = window().unwrap();
-        window.request_animation_frame(self.update_closure.get_function())
+        window.request_animation_frame(self.update_closure.function())
             .unwrap();
     }
 
