@@ -180,8 +180,7 @@ pub fn update_game_over(
     game_state : &mut GameState,
     overlay : &HtmlElement) -> anyhow::Result<()> {
 
-    let document = overlay
-        .owner_document().ok_or(anyhow::anyhow!("Failed to get document node."))?;
+    let document = overlay.owner_document().unwrap();
 
     let game_over_id = "game-over";
     let game_over = document.get_element_by_id(game_over_id);
@@ -215,9 +214,7 @@ pub fn update_score_board(
     game_state : &mut GameState,
     overlay : &HtmlElement) -> anyhow::Result<()> {
 
-    let document = overlay
-        .owner_document()
-        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+    let document = overlay.owner_document().unwrap();
 
     let score_board_id = "score-board";
     let score_board = document.get_element_by_id(score_board_id);

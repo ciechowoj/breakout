@@ -118,9 +118,7 @@ pub async fn create_scoreboard_html(
 
     scoreboard_str.push_str("</table>");
 
-    let document = overlay
-        .owner_document()
-        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+    let document = overlay.owner_document().unwrap();
 
     let score_board = document.get_element_by_id(score_board_id.as_ref()).unwrap();
     score_board.set_inner_html(scoreboard_str.as_str());
@@ -130,9 +128,7 @@ pub async fn create_scoreboard_html(
 }
 
 pub fn collapse_scoreboard_input_html(overlay : &HtmlElement) -> anyhow::Result<()> {
-    let document = overlay
-        .owner_document()
-        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+    let document = overlay.owner_document().unwrap();
 
     let scoreboard_input = document.get_element_by_id("score-board-input");
     let parent = scoreboard_input.map(|input| input.parent_element().unwrap());
@@ -172,9 +168,7 @@ pub fn create_scoreboard(
     new_score : i64,
     score_id : Rc<RefCell<Uuid>>,
     score_board_id : &str) -> anyhow::Result<()> {
-    let document = overlay
-        .owner_document()
-        .ok_or(anyhow::anyhow!("Failed to get document node."))?;
+    let document = overlay.owner_document().unwrap();
 
     let score_board : HtmlElement = document.create_element("div").unwrap().unchecked_into();
     score_board.set_id(score_board_id);
