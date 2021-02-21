@@ -307,7 +307,7 @@ pub fn update(
         }
         else {
             for touch in &game_state.touch_tracker.touches {
-                if touch.client_x < 500f32 {
+                if touch.client_x < 500i32 {
                     game_state.bat.input = vec2(-1f32, 0f32);
                 }
                 else {

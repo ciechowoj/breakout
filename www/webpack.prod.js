@@ -11,7 +11,7 @@ module.exports = merge(common, {
         onBuildStart: {
           scripts: [
             'cargo build --manifest-path=../api/Cargo.toml --release',
-            'wasm-pack build ../'
+            'wasm-pack build ../breakout/'
           ],
           blocking: true,
           parallel: false
