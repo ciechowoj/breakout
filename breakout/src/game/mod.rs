@@ -313,10 +313,6 @@ pub fn update(
             }
         }
 
-        for touch in &game_state.touch_tracker.borrow().touches {
-            log!("{:?}", touch);
-        }
-
         let epsilon = 0.01f64;
         let mut current = game_state.last_time;
         game_state.time.real_time = time;

@@ -208,53 +208,6 @@ pub fn player_name() -> anyhow::Result<Option<String>> {
     return Ok(None);
 }
 
-pub fn _load_scores_from_local_storage() -> anyhow::Result<Option<Vec<PlayerScore>>> {
-    let window = web_sys::window().unwrap();
-
-    let local_storage = window
-        .local_storage()
-        .to_anyhow()?
-        .ok_or(anyhow::anyhow!("Failed to get local_storage!"))?;
-
-    let high_scores = local_storage.get_item("high-scores").to_anyhow()?;
-
-    return match high_scores {
-        Some(string) => {
-            let result: Vec<PlayerScore> = serde_json::from_str(&string)?;
-            Ok(Some(result))
-        },
-        None => Ok(None)
-    };
-}
-
-pub async fn _load_scores() -> anyhow::Result<Vec<PlayerScore>> {
-    let scores = _list_scores_http(&ListScoresRequest { limit: Some(10) }).await?;
-
-    if scores.status() != http::status::StatusCode::OK {
-        return Err(anyhow::anyhow!("Failed to list scores."));
-    }
-
-    let mut scores = scores.into_body();
-
-    scores.sort_by(|a, b| b.score.cmp(&a.score));
-
-    return Ok(scores);
-}
-
-pub fn _save_scores_to_local_storage(high_scores : Vec<PlayerScore>) -> anyhow::Result<()> {
-    let window = web_sys::window().unwrap();
-
-    let local_storage = window
-        .local_storage()
-        .to_anyhow()?
-        .ok_or(anyhow::anyhow!("Failed to get local_storage!"))?;
-
-    let string = serde_json::to_string(&high_scores)?;
-    local_storage.set_item("high-scores", string.as_str()).to_anyhow()?;
-
-    return Ok(());
-}
-
 pub async fn persist_score_inner(name : String, score_id : Uuid) -> anyhow::Result<()> {
     crate::webapi::rename_score(&RenameScoreRequest {
         id: score_id,
