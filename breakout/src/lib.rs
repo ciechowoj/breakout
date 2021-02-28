@@ -208,7 +208,7 @@ impl Application {
         }
 
         game::update(&mut self.game_state.as_mut().unwrap(), time)?;
-        game::update_overlay(&mut self.game_state.as_mut().unwrap().borrow_mut(), time)?;
+        game::update_overlay(self.game_state.as_mut().unwrap(), time)?;
         game::render(&mut self.game_state.as_mut().unwrap().borrow_mut(), &rendering_context, canvas_size, time)?;
 
         return Ok(());

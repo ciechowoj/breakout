@@ -146,25 +146,46 @@ impl KeyboardState {
             let keyboard_state = std::rc::Rc::downgrade(&keyboard_state);
 
             Box::new(move |event : web_sys::KeyboardEvent| {
-                let keyboard_state = keyboard_state.upgrade().unwrap();
-                keyboard_state.borrow_mut().state.insert(event.key());
+                let event = event.dyn_into::<web_sys::KeyboardEvent>();
+
+                match event {
+                    Ok(event) => {
+                        let keyboard_state = keyboard_state.upgrade().unwrap();
+                        keyboard_state.borrow_mut().state.insert(event.code());
+                    },
+                    _ => ()
+                }
             })
         });
 
         let keyup_closure = ClosureHandle::new({
             let keyboard_state = std::rc::Rc::downgrade(&keyboard_state);
 
-            Box::new(move |event : web_sys::KeyboardEvent| {
-                let keyboard_state = keyboard_state.upgrade().unwrap();
-                keyboard_state.borrow_mut().state.remove(&event.key());
+            Box::new(move |event : web_sys::Event| {
+                let event = event.dyn_into::<web_sys::KeyboardEvent>();
+
+                match event {
+                    Ok(event) => {
+                        let keyboard_state = keyboard_state.upgrade().unwrap();
+                        keyboard_state.borrow_mut().state.remove(&event.code());
+                    },
+                    _ => ()
+                }
             })
         });
 
-        document.add_event_listener_with_callback("keydown", keydown_closure.function()).unwrap();
-        document.add_event_listener_with_callback("keyup", keyup_closure.function()).unwrap();
-
         keyboard_state.borrow_mut().keydown_closure = keydown_closure;
         keyboard_state.borrow_mut().keyup_closure = keyup_closure;
+
+        document.add_event_listener_with_callback(
+            "keydown",
+            keyboard_state.borrow().keydown_closure.function())
+            .unwrap();
+
+        document.add_event_listener_with_callback(
+            "keyup",
+            keyboard_state.borrow().keyup_closure.function())
+            .unwrap();
 
         return keyboard_state;
     }

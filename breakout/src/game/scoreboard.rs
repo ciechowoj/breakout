@@ -48,7 +48,7 @@ pub async fn proof_of_work_async(session_id : [u8; 32], seed : u64, degree : usi
 }
 
 pub async fn create_scoreboard_inner(
-    overlay : &HtmlElement,
+    emitter : js_sys::Function,
     new_score : i64,
     score_id : Rc<RefCell<Uuid>>,
     score_board_id : String) -> anyhow::Result<()> {
@@ -77,7 +77,7 @@ pub async fn create_scoreboard_inner(
 
     match response {
         NewScoreResponse::Response { id, index, scores } => {
-            create_scoreboard_html(overlay, index, scores, score_board_id).await?;
+            create_scoreboard_html(emitter, index, scores, score_board_id).await?;
             *score_id.borrow_mut() = id;
         },
         NewScoreResponse::Error(_) =>
@@ -88,7 +88,7 @@ pub async fn create_scoreboard_inner(
 }
 
 pub async fn create_scoreboard_html(
-    overlay : &HtmlElement,
+    emitter : js_sys::Function,
     index : i64,
     scores : Vec<PlayerScore>,
     score_board_id : String) -> anyhow::Result<()> {
@@ -118,11 +118,19 @@ pub async fn create_scoreboard_html(
 
     scoreboard_str.push_str("</table>");
 
-    let document = overlay.owner_document().unwrap();
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let overlay : HtmlElement = document.get_element_by_id("main-overlay-id")
+        .unwrap().unchecked_into();
 
     let score_board = document.get_element_by_id(score_board_id.as_ref()).unwrap();
     score_board.set_inner_html(scoreboard_str.as_str());
     overlay.append_child(&score_board).to_anyhow()?;
+
+    let input : web_sys::HtmlElement = document.get_element_by_id("score-board-input")
+        .unwrap().unchecked_into();
+
+    input.add_event_listener_with_callback("change", &emitter).unwrap();
 
     return Ok(());
 }
@@ -151,11 +159,11 @@ pub fn collapse_scoreboard_input_html(overlay : &HtmlElement) -> anyhow::Result<
 }
 
 pub async fn populate_scoreboard(
-    overlay : HtmlElement,
+    emitter : js_sys::Function,
     new_score : i64,
     score_id : Rc<RefCell<Uuid>>,
     score_board_id : String) {
-    let result1 = create_scoreboard_inner(&overlay, new_score, score_id, score_board_id.clone()).await;
+    let result1 = create_scoreboard_inner(emitter, new_score, score_id, score_board_id.clone()).await;
 
     match result1 {
         Err(error) => log!("Failed to create scoreboard: {:?}", error),
@@ -164,18 +172,22 @@ pub async fn populate_scoreboard(
 }
 
 pub fn create_scoreboard(
-    overlay : HtmlElement,
+    emitter : js_sys::Function,
     new_score : i64,
     score_id : Rc<RefCell<Uuid>>,
     score_board_id : &str) -> anyhow::Result<()> {
-    let document = overlay.owner_document().unwrap();
+
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let overlay : HtmlElement = document.get_element_by_id("main-overlay-id")
+        .unwrap().unchecked_into();
 
     let score_board : HtmlElement = document.create_element("div").unwrap().unchecked_into();
     score_board.set_id(score_board_id);
 
     overlay.append_child(&score_board).to_anyhow()?;
 
-    let future = populate_scoreboard(overlay.clone(), new_score, score_id, score_board_id.to_owned());
+    let future = populate_scoreboard(emitter, new_score, score_id, score_board_id.to_owned());
 
     execute(future);
 

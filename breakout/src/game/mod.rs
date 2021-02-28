@@ -70,7 +70,8 @@ pub struct GameState {
     pub game_over_time : f64,
     pub keyboard_state : Rc<RefCell<KeyboardState>>,
     pub touch_tracker : Rc<RefCell<TouchTracker>>,
-    pub reset_requested : bool
+    pub reset_requested : bool,
+    submit_emitter : ClosureHandle
 }
 
 impl GameState {
@@ -92,7 +93,8 @@ impl GameState {
             game_over_time: 0f64,
             keyboard_state: KeyboardState::new(),
             touch_tracker: TouchTracker::new(),
-            reset_requested: false
+            reset_requested: false,
+            submit_emitter: ClosureHandle::Empty
         };
 
         let game_state = Rc::new(RefCell::new(game_state));
@@ -104,43 +106,66 @@ impl GameState {
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();
 
-        let game_state = game_state.clone();
-
         let on_keyup : Box<dyn FnMut(web_sys::KeyboardEvent)> = {
-            let document = document.clone();
+            let game_state = game_state.clone();
 
-            Box::new(move |event : web_sys::KeyboardEvent| {
-                let game_state : &mut GameState = &mut game_state.borrow_mut();
+            {
+                Box::new(move |event : web_sys::KeyboardEvent| {
+                    let event = event.dyn_into::<web_sys::KeyboardEvent>();
 
-                match event.key().as_str() {
-                    "Enter" => {
-                        match game_state.stage {
-                            GameStage::ScoreBoard => {
-                                if !game_state.reset_requested {
-                                    if let Some(name) = player_name().unwrap() {
-                                        let overlay : HtmlElement = document.get_element_by_id("main-overlay-id").unwrap().unchecked_into();
-                                        let message = "Are you sure you want to post you score and nickname? The record cannot be changed or removed.";
-
-                                        if window.confirm_with_message(message).unwrap() {
-                                            persist_score(overlay, name, *game_state.score_id.borrow()).unwrap();
-                                        }
+                    match event {
+                        Ok(event) => {
+                            match event.key().as_str() {
+                                "Enter" => {
+                                    match game_state.borrow().stage {
+                                        GameStage::ScoreBoard => {
+                                            Self::submit_score(game_state.clone())
+                                        },
+                                        _ => {}
                                     }
-
-                                    game_state.reset_requested = true;
                                 }
-                            },
-                            _ => {}
-                        }
+                                _ => {}
+                            }
+                        },
+                        _ => ()
                     }
-                    _ => {}
-                }
-            })
+                })
+            }
         };
 
         let closure = Closure::wrap(on_keyup);
         document.add_event_listener_with_callback("keyup", closure.as_ref()
             .unchecked_ref()).unwrap();
         closure.forget();
+
+        game_state.borrow_mut().submit_emitter = ClosureHandle::new({
+            let game_state = std::rc::Rc::downgrade(&game_state);
+
+            Box::new(move |_ : JsValue| {
+                let game_state = game_state.upgrade().unwrap();
+                GameState::submit_score(game_state);
+            })
+        });
+    }
+
+    fn submit_score(game_state : std::rc::Rc<std::cell::RefCell<GameState>>) {
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+
+        let mut game_state = game_state.borrow_mut();
+
+        if !game_state.reset_requested {
+            if let Some(name) = player_name().unwrap() {
+                let overlay : HtmlElement = document.get_element_by_id("main-overlay-id").unwrap().unchecked_into();
+                let message = "Are you sure you want to post you score and nickname? The record cannot be changed or removed.";
+
+                if window.confirm_with_message(message).unwrap() {
+                    persist_score(overlay, name, *game_state.score_id.borrow()).unwrap();
+                }
+            }
+
+            game_state.reset_requested = true;
+        }
     }
 
     pub fn init(time : f64) -> Rc<RefCell<GameState>> {
@@ -211,7 +236,7 @@ pub fn update_game_over(
 }
 
 pub fn update_score_board(
-    game_state : &mut GameState,
+    game_state : &Rc<RefCell<GameState>>,
     overlay : &HtmlElement) -> anyhow::Result<()> {
 
     let document = overlay.owner_document().unwrap();
@@ -221,7 +246,7 @@ pub fn update_score_board(
 
     match score_board {
         Some(element) => {
-            match game_state.stage {
+            match game_state.borrow().stage {
                 GameStage::ScoreBoard => {},
                 _ => {
                     overlay.remove_child(&element).to_anyhow()?;
@@ -229,9 +254,13 @@ pub fn update_score_board(
             }
         },
         None => {
-            match game_state.stage {
+            match game_state.borrow().stage {
                 GameStage::ScoreBoard => {
-                    create_scoreboard(overlay.clone(), game_state.score, game_state.score_id.clone(), score_board_id)?;
+                    create_scoreboard(
+                        game_state.borrow().submit_emitter.function().clone(),
+                        game_state.borrow().score,
+                        game_state.borrow().score_id.clone(),
+                        score_board_id)?;
                 },
                 _ => {}
             }
@@ -242,7 +271,7 @@ pub fn update_score_board(
 }
 
 pub fn update_overlay(
-    game_state : &mut GameState,
+    game_state : &Rc<RefCell<GameState>>,
     _time : f64) -> anyhow::Result<()> {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
@@ -252,13 +281,13 @@ pub fn update_overlay(
     let score : HtmlElement = document.get_element_by_id("footer-score").unwrap().unchecked_into();
     let lives : HtmlElement = document.get_element_by_id("footer-lives").unwrap().unchecked_into();
 
-    match game_state.stage {
+    match game_state.borrow().stage {
         GameStage::Gameplay | GameStage::GameOver => {
-            let score_str = game_state.score.to_string();
+            let score_str = game_state.borrow().score.to_string();
             score.style().remove_property("display").to_anyhow()?;
             score.set_inner_html(&score_str[..]);
 
-            let lives_str =  "❤".repeat(game_state.lives as usize);
+            let lives_str =  "❤".repeat(game_state.borrow().lives as usize);
             lives.style().remove_property("display").to_anyhow()?;
             lives.set_inner_html(&lives_str[..]);
         },
@@ -268,7 +297,7 @@ pub fn update_overlay(
         }
     };
 
-    update_game_over(game_state, &overlay)?;
+    update_game_over(&mut game_state.borrow_mut(), &overlay)?;
     update_score_board(game_state, &overlay)?;
 
     return Ok(());
